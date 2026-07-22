@@ -3,6 +3,8 @@ import { ConfigError, resolveConfig } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
 import { isProtectedBranch } from '../core/policy.js';
 
+export const LAST_UNDO_REF = 'refs/devin-autogit/last-undo';
+
 export interface UndoOptions {
   json: boolean;
   dryRun: boolean;
@@ -19,14 +21,21 @@ export function runUndo(opts: UndoOptions, cwd = process.cwd()): number {
 
   const head = git.headSha();
   if (head === null) {
-    out.error('no HEAD commit to undo');
-    return EXIT_CONFIG_ERROR;
+    out.info('nothing to undo — no commits');
+    out.result({ ok: true, action: 'undo', result: 'noop', reason: 'nothing-to-undo' });
+    return EXIT_OK;
   }
 
   const message = git.commitMessage('HEAD');
   if (message === null || !hasShippedByTrailer(message)) {
+    const lastUndo = git.exec(['rev-parse', '--verify', '--quiet', LAST_UNDO_REF]);
+    if (lastUndo.ok && lastUndo.stdout.trim() === head) {
+      out.info('nothing to undo — the last shipped commit was already undone');
+      out.result({ ok: true, action: 'undo', result: 'noop', reason: 'nothing-to-undo' });
+      return EXIT_OK;
+    }
     out.error('last commit was not shipped by devin-autogit — refusing to undo');
-    out.result({ ok: false, action: 'undo', reason: 'foreign-commit' });
+    out.result({ ok: false, action: 'undo', result: 'refused', reason: 'foreign-commit' });
     return EXIT_CONFIG_ERROR;
   }
 
@@ -87,6 +96,7 @@ export function runUndo(opts: UndoOptions, cwd = process.cwd()): number {
     out.error(`local reset failed: ${reset.stderr.trim()}`);
     return EXIT_CONFIG_ERROR;
   }
+  git.updateRef(LAST_UNDO_REF, parent);
   out.info(`undid commit ${head.slice(0, 12)} — changes preserved in the working tree`);
   out.result({ ok: true, action: 'undo', undone: head, parent });
   return EXIT_OK;

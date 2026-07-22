@@ -1,4 +1,4 @@
-import { Git, buildCommitMessage, deriveSubject } from '../core/git.js';
+import { Git, buildCommitMessage, deriveSubject, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, resolveConfig } from '../core/config.js';
 import { evaluatePolicy } from '../core/policy.js';
 import { scanAddedLines } from '../core/secrets.js';
@@ -55,6 +55,24 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     ];
   }
 
+  if (detection.autonomous && metadata.errors.length > 0) {
+    for (const err of metadata.errors) {
+      out.warn(`invalid Devin metadata: ${err}`);
+    }
+    out.info('metadata is unparseable — holding (fail-closed in autonomous mode)');
+    out.result({
+      ok: true,
+      action: 'ship',
+      shipped: false,
+      held: true,
+      result: 'held',
+      reason: 'invalid-metadata',
+      holds: metadata.errors.map((e) => ({ gate: 'metadata', reason: `invalid metadata: ${e}` })),
+      autonomous: detection.autonomous,
+    });
+    return EXIT_OK;
+  }
+
   if (!git.hasAnyChanges() && !git.hasStagedChanges()) {
     out.info('working tree clean — nothing to ship');
     out.result({ ok: true, action: 'ship', shipped: false, reason: 'clean' });
@@ -92,23 +110,33 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     for (const hold of decision.holds) {
       out.warn(`hold (${hold.gate}): ${hold.reason}`);
     }
-    out.info('changes held — nothing committed, working tree preserved');
+    git.unstageAll();
+    out.info('changes held — nothing committed, everything unstaged, working tree preserved');
     out.result({
       ok: true,
       action: 'ship',
       shipped: false,
       held: true,
+      result: 'held',
+      reason: decision.holds[0]?.gate ?? 'policy',
       holds: decision.holds,
       autonomous: detection.autonomous,
     });
     return EXIT_OK;
   }
 
+  if (opts.forceSecrets && !detection.autonomous && findings.length > 0) {
+    out.warn(
+      `secrets gate OVERRIDDEN by --force-secrets: ${findings.length} potential secret(s) will be shipped`,
+    );
+  }
+
   const sessionId = detection.sessionId ?? metadata.sessionId ?? undefined;
-  const subject = deriveSubject(opts.message, metadata.task ?? undefined, stagedFiles);
+  const task = detection.task ?? metadata.task ?? undefined;
+  const subject = deriveSubject(opts.message, task, stagedFiles);
   const message = buildCommitMessage(subject, {
     session: sessionId,
-    task: metadata.task ? taskSlug(metadata.task) : undefined,
+    task: task ? taskSlug(task) : undefined,
   });
 
   if (opts.dryRun) {
@@ -150,9 +178,30 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     return EXIT_OK;
   }
 
-  const { result: push, rebased } = git.pushWithRebaseRetry(opts.remote, branch as string);
+  const { result: push, rebased, rebaseConflict } = git.pushWithRebaseRetry(
+    opts.remote,
+    branch as string,
+  );
   if (!push.ok) {
-    out.warn(`push failed: ${push.stderr.trim()}`);
+    if (rebaseConflict) {
+      out.warn('rebase conflict — cannot auto-resolve, holding (fail-closed)');
+      out.info('rebase aborted; commit is local — resolve manually or retry after pulling');
+      out.result({
+        ok: true,
+        action: 'ship',
+        shipped: true,
+        pushed: false,
+        held: true,
+        result: 'held',
+        reason: 'rebase-conflict',
+        holds: [{ gate: 'push', reason: 'rebase-conflict' }],
+        subject,
+        branch,
+        sha: git.headSha(),
+      });
+      return EXIT_OK;
+    }
+    out.warn(`push failed: ${sanitizeRemoteUrl(push.stderr.trim())}`);
     out.info('commit is local — held for retry on next ship');
     out.result({
       ok: true,
@@ -160,7 +209,9 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       shipped: true,
       pushed: false,
       held: true,
-      holds: [{ gate: 'push', reason: push.stderr.trim() }],
+      result: 'held',
+      reason: 'push-failed',
+      holds: [{ gate: 'push', reason: sanitizeRemoteUrl(push.stderr.trim()) }],
       subject,
       branch,
       sha: git.headSha(),

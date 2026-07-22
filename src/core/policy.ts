@@ -1,5 +1,5 @@
 import type { PolicyConfig } from './config.js';
-import type { SecretFinding } from './secrets.js';
+import { isTemplatePath, type SecretFinding } from './secrets.js';
 
 export interface PolicyInput {
   branch: string | null;
@@ -80,7 +80,9 @@ export function evaluatePolicy(input: PolicyInput, policy: PolicyConfig): Policy
     holds.push({ gate: 'branch', reason: 'detached HEAD — cannot determine branch' });
   }
 
-  const deniedFiles = input.stagedFiles.filter((f) => matchesAnyGlob(f, policy.denyPaths));
+  const deniedFiles = input.stagedFiles.filter(
+    (f) => matchesAnyGlob(f, policy.denyPaths) && !isTemplatePath(f),
+  );
   const allowFiltered =
     policy.allowPaths.length > 0
       ? input.stagedFiles.filter((f) => !matchesAnyGlob(f, policy.allowPaths))

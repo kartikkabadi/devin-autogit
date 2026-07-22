@@ -33,7 +33,22 @@ describe('secrets scan', () => {
   it('exempts template files', () => {
     expect(isTemplatePath('.env.example')).toBe(true);
     expect(isTemplatePath('config.sample.json')).toBe(true);
+    expect(isTemplatePath('README.example.md')).toBe(true);
+    expect(isTemplatePath('templates/config.json')).toBe(true);
+    expect(isTemplatePath('docs/examples/setup.md')).toBe(true);
+    expect(isTemplatePath('.env')).toBe(false);
+    expect(isTemplatePath('src/secrets.ts')).toBe(false);
     expect(scanLine('.env.example', 'ghp_abcdefghijklmnopqrstuvwxyz0123456789')).toBeNull();
+    expect(scanLine('.env.example', 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE')).toBeNull();
+  });
+
+  it('does not exempt secrets in real files just because the value looks like an example', () => {
+    expect(scanLine('.env', 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE')?.kind).toBe(
+      'aws-access-key',
+    );
+    expect(scanLine('src/config.ts', 'api_key = "EXAMPLEq7Rf2LmXa9Bc4Dw8Ez1G"')?.kind).toBe(
+      'generic-assignment',
+    );
   });
 
   it('exempts placeholder tokens in generic assignments', () => {
@@ -52,6 +67,22 @@ describe('secrets scan', () => {
     expect(isSensitiveFilename('config/.env.production')).toBe(true);
     expect(isSensitiveFilename('.env.example')).toBe(false);
     expect(isSensitiveFilename('src/env.ts')).toBe(false);
+  });
+
+  it('scanAddedLines flags an example-looking AWS key in a real .env file', () => {
+    const findings = scanAddedLines(
+      [{ file: '.env', line: 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE' }],
+      ['.env'],
+    );
+    expect(findings.map((f) => f.kind).sort()).toEqual(['aws-access-key', 'sensitive-filename']);
+  });
+
+  it('scanAddedLines exempts the same value in .env.example', () => {
+    const findings = scanAddedLines(
+      [{ file: '.env.example', line: 'AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE' }],
+      ['.env.example'],
+    );
+    expect(findings).toEqual([]);
   });
 
   it('scanAddedLines combines filename and content findings', () => {

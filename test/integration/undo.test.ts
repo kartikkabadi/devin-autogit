@@ -26,15 +26,43 @@ describe('undo (integration)', () => {
     expect(git(fix, ['status', '--porcelain']).stdout).toContain('feature.ts');
   });
 
+  it('is a noop on a second undo (nothing left to undo)', () => {
+    fix = makeFixture({ devin: true });
+    enable(fix);
+    writeFileSync(join(fix.repo, 'feature.ts'), 'export const x = 1;\n');
+    cliJson(fix, ['ship', '-m', 'Add feature']);
+
+    expect(cli(fix, ['undo']).code).toBe(0);
+    const second = cli(fix, ['--json', 'undo']);
+    expect(second.code).toBe(0);
+    const json = JSON.parse(second.stdout.trim()) as Record<string, unknown>;
+    expect(json['result']).toBe('noop');
+    expect(json['reason']).toBe('nothing-to-undo');
+  });
+
+  it('is a noop when there are no commits at all', () => {
+    fix = makeFixture({ devin: true });
+    const empty = join(fix.root, 'empty');
+    git(fix, ['init', empty], fix.root);
+    const res = cli(fix, ['--json', 'undo'], empty);
+    expect(res.code).toBe(0);
+    const json = JSON.parse(res.stdout.trim()) as Record<string, unknown>;
+    expect(json['result']).toBe('noop');
+    expect(json['reason']).toBe('nothing-to-undo');
+  });
+
   it('refuses to undo a foreign commit', () => {
     fix = makeFixture({ devin: true });
     enable(fix);
     writeFileSync(join(fix.repo, 'manual.ts'), 'export {};\n');
     git(fix, ['add', '-A']);
     git(fix, ['commit', '-m', 'manual commit']);
-    const res = cli(fix, ['undo']);
+    const res = cli(fix, ['--json', 'undo']);
     expect(res.code).toBe(1);
     expect(res.stderr).toContain('refusing');
+    const json = JSON.parse(res.stdout.trim()) as Record<string, unknown>;
+    expect(json['result']).toBe('refused');
+    expect(json['reason']).toBe('foreign-commit');
   });
 
   it('refuses when the remote has moved past the shipped commit', () => {

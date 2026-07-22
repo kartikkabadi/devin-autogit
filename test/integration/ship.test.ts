@@ -1,4 +1,4 @@
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cli, cliJson, enable, git, makeFixture, type Fixture } from './helpers.js';
@@ -94,6 +94,23 @@ describe('ship (integration)', () => {
     expect(result['held']).toBe(true);
     const holds = result['holds'] as Array<{ gate: string }>;
     expect(holds.some((h) => h.gate === 'branch')).toBe(true);
+  });
+
+  it('holds when the branch does not match blueprint branch_prefix', () => {
+    fix = makeFixture({ devin: true, branch: 'devin/test' });
+    enable(fix);
+    mkdirSync(join(fix.repo, '.devin'));
+    writeFileSync(
+      join(fix.repo, '.devin/blueprint.yaml'),
+      'conventions:\n  branch_prefix: demo/\n',
+    );
+    writeFileSync(join(fix.repo, 'x.ts'), 'export {};\n');
+    const result = cliJson(fix, ['ship']);
+    expect(result['held']).toBe(true);
+    expect(result['result']).toBe('held');
+    expect(result['reason']).toBe('branch-prefix');
+    const holds = result['holds'] as Array<{ gate: string; reason: string }>;
+    expect(holds[0]?.reason).toContain('does not match allowed prefix "demo/"');
   });
 
   it('holds on the size cap', () => {

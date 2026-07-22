@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { policyConfigSchema } from '../../src/core/config.js';
-import { evaluatePolicy, globToRegExp, matchesAnyGlob } from '../../src/core/policy.js';
+import {
+  evaluatePolicy,
+  globToRegExp,
+  matchesAnyGlob,
+  matchesBranchPrefix,
+} from '../../src/core/policy.js';
 import type { PolicyInput } from '../../src/core/policy.js';
 
 const policy = policyConfigSchema.parse({});
@@ -40,6 +45,37 @@ describe('policy engine', () => {
     const decision = evaluatePolicy(input({ branch: 'main' }), policy);
     expect(decision.allowed).toBe(false);
     expect(decision.holds[0]?.gate).toBe('branch');
+  });
+
+  it('holds in autonomous mode when the branch does not match branch_prefix', () => {
+    const decision = evaluatePolicy(input({ branch: 'devin/test', branchPrefix: 'demo/' }), policy);
+    expect(decision.allowed).toBe(false);
+    const hold = decision.holds.find((h) => h.gate === 'branch-prefix');
+    expect(hold?.reason).toBe('branch "devin/test" does not match allowed prefix "demo/"');
+  });
+
+  it('allows a branch matching branch_prefix (literal and glob)', () => {
+    expect(
+      evaluatePolicy(input({ branch: 'demo/x', branchPrefix: 'demo/' }), policy).allowed,
+    ).toBe(true);
+    expect(
+      evaluatePolicy(input({ branch: 'demo/x', branchPrefix: 'demo/*' }), policy).allowed,
+    ).toBe(true);
+    expect(matchesBranchPrefix('demo/a/b', 'demo/')).toBe(true);
+    expect(matchesBranchPrefix('devin/test', 'demo/')).toBe(false);
+  });
+
+  it('skips the branch-prefix gate when the prefix is missing or empty', () => {
+    expect(evaluatePolicy(input({ branchPrefix: null }), policy).allowed).toBe(true);
+    expect(evaluatePolicy(input({ branchPrefix: '' }), policy).allowed).toBe(true);
+  });
+
+  it('skips the branch-prefix gate in interactive mode', () => {
+    const decision = evaluatePolicy(
+      input({ branch: 'devin/test', branchPrefix: 'demo/', autonomous: false }),
+      policy,
+    );
+    expect(decision.holds.some((h) => h.gate === 'branch-prefix')).toBe(false);
   });
 
   it('holds on detached HEAD', () => {

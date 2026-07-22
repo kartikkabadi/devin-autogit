@@ -9,11 +9,12 @@ export interface PolicyInput {
   secretFindings: SecretFinding[];
   autonomous: boolean;
   forceSecrets: boolean;
+  branchPrefix?: string | null;
   llmGateAvailable?: boolean;
 }
 
 export interface Hold {
-  gate: 'branch' | 'path' | 'secrets' | 'size' | 'llm' | 'force-secrets';
+  gate: 'branch' | 'branch-prefix' | 'path' | 'secrets' | 'size' | 'llm' | 'force-secrets';
   reason: string;
   details?: unknown;
 }
@@ -62,6 +63,13 @@ export function isProtectedBranch(branch: string, patterns: string[]): boolean {
   return patterns.some((p) => branch === p || minimatch(branch, p, { dot: true }));
 }
 
+/** Branch prefixes are matched literally or as globs (e.g. `demo/` or `demo/*`). */
+export function matchesBranchPrefix(branch: string, prefix: string): boolean {
+  if (branch.startsWith(prefix)) return true;
+  const pattern = /[*?[\]]/.test(prefix) ? prefix : `${prefix}**`;
+  return minimatch(branch, pattern, { dot: true });
+}
+
 /**
  * Fail-closed gate engine: evaluates all gates and collects every hold so the
  * agent gets a complete picture. In autonomous mode every doubt is a hold.
@@ -84,6 +92,20 @@ export function evaluatePolicy(input: PolicyInput, policy: PolicyConfig): Policy
     });
   } else if (input.branch === null) {
     holds.push({ gate: 'branch', reason: 'detached HEAD — cannot determine branch' });
+  }
+
+  const prefix = input.branchPrefix ?? '';
+  if (
+    input.autonomous &&
+    prefix.length > 0 &&
+    input.branch !== null &&
+    !matchesBranchPrefix(input.branch, prefix)
+  ) {
+    holds.push({
+      gate: 'branch-prefix',
+      reason: `branch "${input.branch}" does not match allowed prefix "${prefix}"`,
+      details: { branch: input.branch, branchPrefix: prefix },
+    });
   }
 
   const deniedFiles = input.stagedFiles.filter(

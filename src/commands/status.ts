@@ -32,13 +32,21 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
 
   let enabled = false;
   let policySummary: unknown = null;
+  let protectedBranches: string[] | null = null;
   let configError: string | null = null;
+  const metadata = root !== null ? readDevinMetadata(root) : null;
   if (root !== null) {
     try {
       const config = resolveConfig(root);
       enabled = config.enabled;
+      protectedBranches = [
+        ...new Set([
+          ...config.policy.protectedBranches,
+          ...(metadata?.protectedBranches ?? []),
+        ]),
+      ];
       policySummary = {
-        protectedBranches: config.policy.protectedBranches,
+        protectedBranches,
         denyPaths: config.policy.denyPaths,
         maxFiles: config.policy.maxFiles,
         maxBytes: config.policy.maxBytes,
@@ -50,7 +58,6 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
     }
   }
 
-  const metadata = root !== null ? readDevinMetadata(root) : null;
   const sessionId = detection.sessionId ?? metadata?.sessionId ?? null;
   const swarmBranches =
     root !== null && sessionId !== null ? listSwarmBranches(git, sessionId) : [];
@@ -80,6 +87,7 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
     sessionId,
     signals: detection.signals,
     policy: policySummary,
+    protectedBranches,
     configError,
     pendingChanges: held,
     swarmBranches,

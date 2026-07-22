@@ -226,8 +226,26 @@ export function buildCommitMessage(subject: string, trailers: Trailers): string 
   return `${subject}\n\n${formatTrailers(trailers)}\n`;
 }
 
+const TRAILER_LINE = /^[A-Za-z0-9][A-Za-z0-9-]*: \S.*$/;
+
+/**
+ * Parse the git trailer block: the final paragraph of the commit message,
+ * separated from the body by a blank line, where every line is a
+ * `Key: value` trailer (or an indented continuation line).
+ */
+export function parseTrailers(message: string): string[] {
+  const lines = message.replace(/\r\n/g, '\n').replace(/\n+$/, '').split('\n');
+  const lastBlank = lines.lastIndexOf('');
+  if (lastBlank <= 0 || lastBlank === lines.length - 1) return [];
+  const block = lines.slice(lastBlank + 1);
+  const isTrailerBlock = block.every(
+    (line) => TRAILER_LINE.test(line) || /^[ \t]/.test(line),
+  );
+  return isTrailerBlock ? block.filter((line) => TRAILER_LINE.test(line)) : [];
+}
+
 export function hasShippedByTrailer(message: string): boolean {
-  return message.split('\n').some((line) => line.trim() === SHIPPED_BY_TRAILER);
+  return parseTrailers(message).some((line) => line.trim() === SHIPPED_BY_TRAILER);
 }
 
 /** Subject precedence: -m flag > Devin task > file-list fallback. Flattened, 72-char cap. */

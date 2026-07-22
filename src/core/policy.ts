@@ -1,3 +1,4 @@
+import { minimatch } from 'minimatch';
 import type { PolicyConfig } from './config.js';
 import { isTemplatePath, type SecretFinding } from './secrets.js';
 
@@ -53,7 +54,12 @@ export function globToRegExp(glob: string): RegExp {
 }
 
 export function matchesAnyGlob(path: string, globs: string[]): boolean {
-  return globs.some((g) => globToRegExp(g).test(path));
+  return globs.some((g) => minimatch(path, g, { dot: true }));
+}
+
+/** Protected-branch patterns are matched as globs (e.g. `release/*`). */
+export function isProtectedBranch(branch: string, patterns: string[]): boolean {
+  return patterns.some((p) => branch === p || minimatch(branch, p, { dot: true }));
 }
 
 /**
@@ -70,7 +76,7 @@ export function evaluatePolicy(input: PolicyInput, policy: PolicyConfig): Policy
     });
   }
 
-  if (input.branch !== null && policy.protectedBranches.includes(input.branch)) {
+  if (input.branch !== null && isProtectedBranch(input.branch, policy.protectedBranches)) {
     holds.push({
       gate: 'branch',
       reason: `branch "${input.branch}" is protected`,

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { Git } from '../core/git.js';
-import { globalConfigDir, globalConfigPath, globalConfigSchema } from '../core/config.js';
+import { globalConfigDir, globalConfigPath, loadGlobalConfig } from '../core/config.js';
 import { Output, EXIT_OK } from '../core/output.js';
 import { detectDevinSession } from '../devin/session.js';
 
@@ -14,15 +14,20 @@ export function runSetup(opts: SetupOptions, cwd = process.cwd()): number {
   const git = new Git(cwd);
   const detection = detectDevinSession({ repoRoot: git.isRepo() ? git.repoRoot() : null });
 
+  const environment = `${detection.isDevin ? 'devin' : 'generic'}/${
+    detection.autonomous ? 'autonomous' : 'interactive'
+  }`;
+
   const dir = globalConfigDir();
   const path = globalConfigPath();
   const created = !existsSync(path);
-  if (created && !opts.dryRun) {
+  if (!opts.dryRun) {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path, JSON.stringify(globalConfigSchema.parse({}), null, 2) + '\n');
+    const config = { ...loadGlobalConfig(), environment };
+    writeFileSync(path, JSON.stringify(config, null, 2) + '\n');
   }
 
-  out.info(`environment: ${detection.isDevin ? 'Devin session detected' : 'generic agent/human'}`);
+  out.info(`environment: ${environment}`);
   if (detection.sessionId) out.info(`session: ${detection.sessionId}`);
   out.info(
     created
@@ -37,6 +42,7 @@ export function runSetup(opts: SetupOptions, cwd = process.cwd()): number {
     ok: true,
     action: 'setup',
     devinDetected: detection.isDevin,
+    environment,
     sessionId: detection.sessionId,
     autonomous: detection.autonomous,
     globalConfigPath: path,

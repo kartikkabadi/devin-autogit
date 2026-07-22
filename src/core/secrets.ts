@@ -19,6 +19,7 @@ const PATTERNS: SecretPattern[] = [
   { kind: 'aws-access-key', regex: /\b(AKIA|ASIA)[0-9A-Z]{16}\b/ },
   { kind: 'aws-secret-key', regex: /\baws_secret_access_key\s*[=:]\s*['"]?[A-Za-z0-9/+=]{40}\b/i },
   { kind: 'anthropic-key', regex: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
+  { kind: 'stripe-key', regex: /\b(sk|pk|rk)_(live|test)_[0-9a-zA-Z]{24,}\b/ },
   { kind: 'openai-key', regex: /\bsk-(proj-)?[A-Za-z0-9_-]{20,}\b/ },
   { kind: 'github-token', regex: /\b(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,}\b/ },
   { kind: 'github-pat', regex: /\bgithub_pat_[A-Za-z0-9_]{22,}\b/ },

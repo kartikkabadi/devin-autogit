@@ -24,6 +24,20 @@ describe('secrets scan', () => {
     }
   });
 
+  it('flags Stripe keys in real files but exempts template files', () => {
+    // Assembled at runtime so no key-shaped literal lands in the repo.
+    const body = 'abcdefghijklmnopqrstuvwx';
+    const keys = ['sk', 'pk', 'rk'].flatMap((prefix) =>
+      ['live', 'test'].map((mode) => [prefix, mode, body].join('_')),
+    );
+    for (const key of keys) {
+      expect(scanLine('src/payments.ts', `const stripeKey = "${key}";`)?.kind, key).toBe(
+        'stripe-key',
+      );
+      expect(scanLine('.env.example', `STRIPE_KEY=${key}`)).toBeNull();
+    }
+  });
+
   it('flags JWTs', () => {
     const jwt =
       'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U';

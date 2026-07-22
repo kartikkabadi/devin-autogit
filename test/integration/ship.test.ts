@@ -1,4 +1,4 @@
-import { rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { cli, cliJson, enable, git, makeFixture, type Fixture } from './helpers.js';
@@ -28,6 +28,21 @@ describe('ship (integration)', () => {
     const remote = git(fix, ['ls-remote', 'origin', 'refs/heads/devin/test/work']);
     const local = git(fix, ['rev-parse', 'HEAD']);
     expect(remote.stdout).toContain(local.stdout.trim());
+  });
+
+  it('never commits .devin-autogit.json as part of a ship', () => {
+    fix = makeFixture({ devin: true });
+    enable(fix);
+    const exclude = readFileSync(join(fix.repo, '.git/info/exclude'), 'utf8');
+    expect(exclude).toContain('/.devin-autogit.json');
+
+    writeFileSync(join(fix.repo, 'feature.ts'), 'export const x = 1;\n');
+    const result = cliJson(fix, ['ship', '-m', 'Add feature']);
+    expect(result['shipped']).toBe(true);
+    expect(result['files']).not.toContain('.devin-autogit.json');
+
+    const tracked = git(fix, ['ls-files']);
+    expect(tracked.stdout).not.toContain('.devin-autogit.json');
   });
 
   it('is a clean no-op when not enabled', () => {

@@ -1,5 +1,5 @@
 import { Git, buildCommitMessage, deriveSubject, sanitizeRemoteUrl } from '../core/git.js';
-import { ConfigError, resolveConfig } from '../core/config.js';
+import { ConfigError, REPO_CONFIG_FILENAME, resolveConfig } from '../core/config.js';
 import { evaluatePolicy } from '../core/policy.js';
 import { scanAddedLines } from '../core/secrets.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
@@ -88,6 +88,10 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
   if (!stage.ok) {
     out.error(`git add failed: ${stage.stderr.trim()}`);
     return EXIT_CONFIG_ERROR;
+  }
+
+  if (git.stagedFiles().includes(REPO_CONFIG_FILENAME)) {
+    git.exec(['reset', '--', REPO_CONFIG_FILENAME]);
   }
 
   const stagedFiles = git.stagedFiles();

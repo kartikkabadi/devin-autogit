@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { Git, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, REPO_CONFIG_FILENAME, repoConfigSchema } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
@@ -9,6 +9,19 @@ export interface OnOptions {
   dryRun: boolean;
   policy?: string;
   publicOk: boolean;
+}
+
+/** Keep the config file local-only: add it to .git/info/exclude so `git add -A` never stages it. */
+function excludeConfigFile(git: Git, root: string): void {
+  const gitDir = git.gitDir();
+  if (gitDir === null) return;
+  const excludePath = join(isAbsolute(gitDir) ? gitDir : resolve(root, gitDir), 'info', 'exclude');
+  const entry = `/${REPO_CONFIG_FILENAME}`;
+  const existing = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
+  if (existing.split('\n').some((line) => line.trim() === entry)) return;
+  mkdirSync(dirname(excludePath), { recursive: true });
+  const prefix = existing.length > 0 && !existing.endsWith('\n') ? '\n' : '';
+  appendFileSync(excludePath, `${prefix}${entry}\n`);
 }
 
 function looksPublic(remoteUrl: string | null): boolean {
@@ -63,6 +76,7 @@ export function runOn(opts: OnOptions, cwd = process.cwd()): number {
   const existed = existsSync(path);
   if (!opts.dryRun) {
     writeFileSync(path, JSON.stringify(config.data, null, 2) + '\n');
+    excludeConfigFile(git, root);
   }
   out.info(
     `${opts.dryRun ? 'would write' : existed ? 'updated' : 'wrote'} ${path} — auto-ship enabled`,

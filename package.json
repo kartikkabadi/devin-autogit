@@ -16,20 +16,23 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "vitest run --passWithNoTests",
+    "pretest": "npm run build",
+    "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write ."
   },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
   "devDependencies": {
     "@types/node": "^20.14.0",
-    "commander": "^12.1.0",
     "eslint": "^9.9.0",
     "prettier": "^3.3.0",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.0.0",
-    "vitest": "^2.0.0",
-    "yaml": "^2.5.0",
-    "zod": "^3.23.0"
+    "vitest": "^2.0.0"
   }
 }

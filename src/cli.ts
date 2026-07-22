@@ -5,9 +5,7 @@ const program = new Command();
 
 program
   .name('devin-autogit')
-  .description(
-    'Devin-aware auto stage → secrets scan → commit → push CLI for AI coding agents',
-  )
+  .description('Devin-aware auto stage → secrets scan → commit → push CLI for AI coding agents')
   .version('0.1.0')
   .option('--json', 'emit machine-readable JSON results on stdout')
   .option('--dry-run', 'show what would happen without making changes');

@@ -13,16 +13,16 @@ node dist/cli.js --help
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `setup` | Detect environment and write global config |
-| `on` / `off` | Enable/disable auto-ship in the current repo |
-| `ship` | Stage → secrets scan → policy gate → commit → push |
-| `undo` | Take back the last devin-autogit commit |
-| `status` | Version, repo enablement, Devin session detection |
-| `checkpoint` | Record a lightweight local checkpoint ref |
-| `swarm` | Per-subagent worktree/branch workflows (init/collect) |
-| `doctor` | Diagnose git auth, remote access, config validity |
+| Command      | Description                                           |
+| ------------ | ----------------------------------------------------- |
+| `setup`      | Detect environment and write global config            |
+| `on` / `off` | Enable/disable auto-ship in the current repo          |
+| `ship`       | Stage → secrets scan → policy gate → commit → push    |
+| `undo`       | Take back the last devin-autogit commit               |
+| `status`     | Version, repo enablement, Devin session detection     |
+| `checkpoint` | Record a lightweight local checkpoint ref             |
+| `swarm`      | Per-subagent worktree/branch workflows (init/collect) |
+| `doctor`     | Diagnose git auth, remote access, config validity     |
 
 > All commands are currently placeholders (`Not implemented`).
 

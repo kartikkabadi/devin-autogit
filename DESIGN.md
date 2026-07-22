@@ -21,15 +21,15 @@ From the upstream source (`index.js`, ~1200 lines, zero-dependency ESM Node ≥1
 
 ## 3. What Devin-AutoGit Improves
 
-| Area | AutoGit | Devin-AutoGit |
-| --- | --- | --- |
-| Target agents | Claude Code, Codex, Cursor, Pi (local hooks) | Devin sessions first; generic agents via `ship` CLI |
-| Failure posture | Fails open (ship on doubt) | **Fails closed** (hold on doubt) in autonomous mode |
-| Language | Untyped JS single file | TypeScript, modular `src/`, typed config via Zod |
-| Session context | Hook payload prompt scraping | Devin session ID/task from env + `.devin/` metadata |
-| Commit traceability | `Shipped-by: autogit` trailer | `Devin-Session:`, `Devin-Task:`, `Shipped-by: devin-autogit` trailers |
-| Multi-agent | Busy markers in one checkout | First-class branch-per-subagent swarm workflow + worktree helpers |
-| Approval | Optional LLM gate | Policy engine: allow/deny globs, size caps, protected branches, optional LLM gate |
+| Area                | AutoGit                                      | Devin-AutoGit                                                                     |
+| ------------------- | -------------------------------------------- | --------------------------------------------------------------------------------- |
+| Target agents       | Claude Code, Codex, Cursor, Pi (local hooks) | Devin sessions first; generic agents via `ship` CLI                               |
+| Failure posture     | Fails open (ship on doubt)                   | **Fails closed** (hold on doubt) in autonomous mode                               |
+| Language            | Untyped JS single file                       | TypeScript, modular `src/`, typed config via Zod                                  |
+| Session context     | Hook payload prompt scraping                 | Devin session ID/task from env + `.devin/` metadata                               |
+| Commit traceability | `Shipped-by: autogit` trailer                | `Devin-Session:`, `Devin-Task:`, `Shipped-by: devin-autogit` trailers             |
+| Multi-agent         | Busy markers in one checkout                 | First-class branch-per-subagent swarm workflow + worktree helpers                 |
+| Approval            | Optional LLM gate                            | Policy engine: allow/deny globs, size caps, protected branches, optional LLM gate |
 
 ## 4. Architecture
 
@@ -54,6 +54,7 @@ bin/devin-autogit  →  src/cli.ts (Commander.js command registry)
 ```
 
 Principles:
+
 - **Pure core, thin shell**: `core/` and `devin/` modules are pure functions over injected exec/fs interfaces → trivially unit-testable without a real repo.
 - **child_process git** (like upstream) rather than simple-git: keeps the dependency surface tiny, output handling explicit, and behavior identical to what agents run manually.
 - **Everything informational on stderr**, machine-readable results (`--json`) on stdout — same discipline as upstream so hook consumers can parse stdout safely.
@@ -61,18 +62,18 @@ Principles:
 
 ## 5. Commands
 
-| Command | Description |
-| --- | --- |
-| `devin-autogit setup` | Detect environment (Devin vs. generic), write global config, print how to wire the ship step (e.g. as a Devin blueprint/AGENTS instruction or a post-turn hook). |
-| `devin-autogit on [--policy <file>] [--public-ok]` | Enable auto-ship in the current repo (writes `.devin-autogit.json`); public-repo guard; fail-closed policy defaults for non-TTY (agent) invocations. |
-| `devin-autogit off` | Disable auto-ship in the repo. |
+| Command                                            | Description                                                                                                                                                          |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `devin-autogit setup`                              | Detect environment (Devin vs. generic), write global config, print how to wire the ship step (e.g. as a Devin blueprint/AGENTS instruction or a post-turn hook).     |
+| `devin-autogit on [--policy <file>] [--public-ok]` | Enable auto-ship in the current repo (writes `.devin-autogit.json`); public-repo guard; fail-closed policy defaults for non-TTY (agent) invocations.                 |
+| `devin-autogit off`                                | Disable auto-ship in the repo.                                                                                                                                       |
 | `devin-autogit ship [-m msg] [--dry-run] [--json]` | Stage → secrets scan → policy gate → commit (Devin trailers) → push, with non-fast-forward rebase-retry. Fail-closed: any gate failure holds (exit 0, changes kept). |
-| `devin-autogit undo` | Take back the last devin-autogit commit — remote rewind (force-with-lease of parent) then local mixed reset; refuses foreign commits. |
-| `devin-autogit status [--json]` | Version, repo enablement, Devin session detection, policy summary, held-changes state, swarm branch info. |
-| `devin-autogit checkpoint [label]` | Record a lightweight local checkpoint ref (`refs/devin-autogit/checkpoints/<ts>`) before risky operations; aligns with Devin's checkpoint concept. |
-| `devin-autogit swarm init <task> [--agents N]` | Create per-subagent worktrees + branches (`devin/<session>/<agent-n>`), each pre-enabled with its own config. |
-| `devin-autogit swarm collect [--into <branch>]` | Merge/rebase completed subagent branches into an integration branch, fail-closed on conflicts. |
-| `devin-autogit doctor` | Diagnose git auth, remote access, Devin env detection, config validity. |
+| `devin-autogit undo`                               | Take back the last devin-autogit commit — remote rewind (force-with-lease of parent) then local mixed reset; refuses foreign commits.                                |
+| `devin-autogit status [--json]`                    | Version, repo enablement, Devin session detection, policy summary, held-changes state, swarm branch info.                                                            |
+| `devin-autogit checkpoint [label]`                 | Record a lightweight local checkpoint ref (`refs/devin-autogit/checkpoints/<ts>`) before risky operations; aligns with Devin's checkpoint concept.                   |
+| `devin-autogit swarm init <task> [--agents N]`     | Create per-subagent worktrees + branches (`devin/<session>/<agent-n>`), each pre-enabled with its own config.                                                        |
+| `devin-autogit swarm collect [--into <branch>]`    | Merge/rebase completed subagent branches into an integration branch, fail-closed on conflicts.                                                                       |
+| `devin-autogit doctor`                             | Diagnose git auth, remote access, Devin env detection, config validity.                                                                                              |
 
 ## 6. Devin-Specific Features
 
@@ -122,30 +123,30 @@ Held changes are never discarded: they remain in the working tree, are re-staged
 
 ## 10. File Plan
 
-| Path | Purpose |
-| --- | --- |
-| `package.json` | Package manifest, `bin` entry, scripts (`build`, `test`, `lint`, `typecheck`). |
-| `tsconfig.json` | Strict TS config, ESM, `dist/` output. |
-| `src/cli.ts` | Commander program: registers all commands, global flags (`--json`, `--dry-run`). |
-| `src/commands/setup.ts` | Environment detection + global config bootstrap. |
-| `src/commands/on.ts` / `src/commands/off.ts` | Per-repo enable/disable, public-repo guard. |
-| `src/commands/ship.ts` | Orchestrates stage → gates → commit → push → rebase-retry. |
-| `src/commands/undo.ts` | Trailer-verified remote rewind + local reset. |
-| `src/commands/status.ts` | Human + `--json` status report. |
-| `src/commands/checkpoint.ts` | Namespaced checkpoint refs. |
-| `src/commands/swarm.ts` | `swarm init` / `swarm collect` worktree + branch workflows. |
-| `src/commands/doctor.ts` | Diagnostics. |
-| `src/core/git.ts` | Typed `spawnSync` git wrapper, trailers, push/rebase helpers. |
-| `src/core/secrets.ts` | Secret patterns, template/placeholder exemptions, staged-diff scan. |
-| `src/core/policy.ts` | Fail-closed gate engine (branch, path, size, LLM gate). |
-| `src/core/config.ts` | Zod schemas + precedence merge (env > repo > global > defaults). |
-| `src/core/output.ts` | stderr logging + stdout `--json` result emitter, exit-code discipline. |
-| `src/devin/session.ts` | Devin environment detection heuristics. |
-| `src/devin/metadata.ts` | `.devin/blueprint.yaml` / `session.json` parsing (yaml + Zod). |
-| `src/devin/swarm.ts` | Worktree/branch naming, busy-marker isolation, collect logic. |
-| `test/unit/*.test.ts` | Vitest unit tests per core module. |
-| `test/integration/*.test.ts` | Temp-repo end-to-end tests (ship/undo/swarm/fail-closed). |
-| `.github/workflows/ci.yml` | Lint, typecheck, test on Node 20/22. |
-| `README.md` | User-facing docs (quick start, commands, safety). |
-| `DESIGN.md` | This document. |
-| `LICENSE` | MIT. |
+| Path                                         | Purpose                                                                          |
+| -------------------------------------------- | -------------------------------------------------------------------------------- |
+| `package.json`                               | Package manifest, `bin` entry, scripts (`build`, `test`, `lint`, `typecheck`).   |
+| `tsconfig.json`                              | Strict TS config, ESM, `dist/` output.                                           |
+| `src/cli.ts`                                 | Commander program: registers all commands, global flags (`--json`, `--dry-run`). |
+| `src/commands/setup.ts`                      | Environment detection + global config bootstrap.                                 |
+| `src/commands/on.ts` / `src/commands/off.ts` | Per-repo enable/disable, public-repo guard.                                      |
+| `src/commands/ship.ts`                       | Orchestrates stage → gates → commit → push → rebase-retry.                       |
+| `src/commands/undo.ts`                       | Trailer-verified remote rewind + local reset.                                    |
+| `src/commands/status.ts`                     | Human + `--json` status report.                                                  |
+| `src/commands/checkpoint.ts`                 | Namespaced checkpoint refs.                                                      |
+| `src/commands/swarm.ts`                      | `swarm init` / `swarm collect` worktree + branch workflows.                      |
+| `src/commands/doctor.ts`                     | Diagnostics.                                                                     |
+| `src/core/git.ts`                            | Typed `spawnSync` git wrapper, trailers, push/rebase helpers.                    |
+| `src/core/secrets.ts`                        | Secret patterns, template/placeholder exemptions, staged-diff scan.              |
+| `src/core/policy.ts`                         | Fail-closed gate engine (branch, path, size, LLM gate).                          |
+| `src/core/config.ts`                         | Zod schemas + precedence merge (env > repo > global > defaults).                 |
+| `src/core/output.ts`                         | stderr logging + stdout `--json` result emitter, exit-code discipline.           |
+| `src/devin/session.ts`                       | Devin environment detection heuristics.                                          |
+| `src/devin/metadata.ts`                      | `.devin/blueprint.yaml` / `session.json` parsing (yaml + Zod).                   |
+| `src/devin/swarm.ts`                         | Worktree/branch naming, busy-marker isolation, collect logic.                    |
+| `test/unit/*.test.ts`                        | Vitest unit tests per core module.                                               |
+| `test/integration/*.test.ts`                 | Temp-repo end-to-end tests (ship/undo/swarm/fail-closed).                        |
+| `.github/workflows/ci.yml`                   | Lint, typecheck, test on Node 20/22.                                             |
+| `README.md`                                  | User-facing docs (quick start, commands, safety).                                |
+| `DESIGN.md`                                  | This document.                                                                   |
+| `LICENSE`                                    | MIT.                                                                             |

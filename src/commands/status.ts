@@ -47,6 +47,7 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
       ];
       policySummary = {
         protectedBranches,
+        branchPrefix: metadata?.branchPrefix ?? null,
         denyPaths: config.policy.denyPaths,
         maxFiles: config.policy.maxFiles,
         maxBytes: config.policy.maxBytes,

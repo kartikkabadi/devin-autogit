@@ -113,6 +113,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       secretFindings: findings,
       autonomous: detection.autonomous,
       forceSecrets: opts.forceSecrets,
+      branchPrefix: metadata.branchPrefix,
     },
     policy,
   );

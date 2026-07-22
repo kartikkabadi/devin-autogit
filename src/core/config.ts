@@ -56,6 +56,7 @@ export type GlobalConfig = z.infer<typeof globalConfigSchema>;
 export interface EffectiveConfig {
   enabled: boolean;
   publicOk: boolean;
+  hooks: boolean;
   branchPrefix: string;
   policy: PolicyConfig;
   repoConfigPath: string | null;
@@ -153,6 +154,7 @@ export function resolveConfig(
   return {
     enabled,
     publicOk: repoCfg?.publicOk ?? false,
+    hooks: repoCfg?.hooks ?? false,
     branchPrefix: env['DEVIN_AUTOGIT_BRANCH_PREFIX'] ?? globalCfg.defaultBranchPrefix,
     policy,
     repoConfigPath: repoCfg ? join(repoRoot, REPO_CONFIG_FILENAME) : null,

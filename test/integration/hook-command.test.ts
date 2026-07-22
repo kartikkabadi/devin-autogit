@@ -123,6 +123,21 @@ describe('on --with-hooks / off', () => {
     expect(existsSync(join(fix.repo, '.devin-autogit.json'))).toBe(false);
   });
 
+  it('status reports hooks:true after on --with-hooks and false after off', () => {
+    const fix = makeFixture();
+    cli(fix, ['on', '--public-ok', '--with-hooks']);
+    expect(cliJson(fix, ['status'])['hooks']).toBe(true);
+
+    cli(fix, ['off']);
+    expect(cliJson(fix, ['status'])['hooks']).toBe(false);
+  });
+
+  it('status reports hooks:false when enabled without hooks', () => {
+    const fix = makeFixture();
+    cli(fix, ['on', '--public-ok']);
+    expect(cliJson(fix, ['status'])['hooks']).toBe(false);
+  });
+
   it('off leaves user hooks alone', () => {
     const fix = makeFixture();
     cli(fix, ['on', '--public-ok', '--with-hooks']);

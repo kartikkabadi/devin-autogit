@@ -1,12 +1,24 @@
 import { createRequire } from 'node:module';
 import { Git } from '../core/git.js';
 import { ConfigError, resolveConfig } from '../core/config.js';
+import { hooksFilePath, isOurHookCommand, readHooksFile } from '../core/hooks.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
 import { detectDevinSession } from '../devin/session.js';
 import { readDevinMetadata } from '../devin/metadata.js';
 import { listSwarmBranches } from '../devin/swarm.js';
 
 const require = createRequire(import.meta.url);
+
+function hookFileInstalled(repoRoot: string): boolean {
+  try {
+    const hooksFile = readHooksFile(hooksFilePath(repoRoot));
+    return Object.values(hooksFile).some((entries) =>
+      entries.some((entry) => entry.hooks.some((hook) => isOurHookCommand(hook.command))),
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function packageVersion(): string {
   const pkg = require('../../package.json') as { version: string };
@@ -31,6 +43,7 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
   const detection = detectDevinSession({ repoRoot: root });
 
   let enabled = false;
+  let hooks = false;
   let policySummary: unknown = null;
   let protectedBranches: string[] | null = null;
   let configError: string | null = null;
@@ -39,6 +52,7 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
     try {
       const config = resolveConfig(root);
       enabled = config.enabled;
+      hooks = config.hooks && hookFileInstalled(root);
       protectedBranches = [
         ...new Set([
           ...config.policy.protectedBranches,
@@ -67,6 +81,7 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
   out.info(`devin-autogit v${version}`);
   out.info(`repo: ${root ?? 'not in a git repository'}`);
   out.info(`enabled: ${enabled}`);
+  out.info(`hooks: ${hooks}`);
   if (configError) out.warn(configError);
   out.info(
     `devin: ${detection.isDevin ? `detected (${detection.signals.join(', ')})` : 'not detected'}`,
@@ -83,6 +98,7 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
     version,
     repo: root,
     enabled,
+    hooks,
     devinDetected: detection.isDevin,
     autonomous: detection.autonomous,
     sessionId,

@@ -1,0 +1,941 @@
+{
+  "$schema_note": "Test scenarios for the Devin-AutoGit CLI. Each scenario runs against a throwaway `git init` repo (with a local bare 'origin' remote unless stated otherwise). `autonomous` = true means the CLI is invoked with no TTY and Devin detection active (DEVIN_SESSION_ID set) so fail-closed defaults apply.",
+  "scenarios": [
+    {
+      "id": "setup-001-devin-env",
+      "category": "setup",
+      "command": "devin-autogit setup",
+      "setup_steps": [
+        "export DEVIN_SESSION_ID=devin-abc123",
+        "use empty HOME dir so no global config exists"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "detects Devin environment, writes global config",
+      "assertions": [
+        "~/.devin-autogit/config.json is created and is valid JSON",
+        "stderr mentions Devin environment detected",
+        "stdout is empty (informational output goes to stderr)"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "setup-002-generic-env",
+      "category": "setup",
+      "command": "devin-autogit setup",
+      "setup_steps": [
+        "unset DEVIN_SESSION_ID and DEVIN_ID",
+        "no .devin/ directory, no /opt/.devin marker",
+        "run with a TTY (interactive)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "detects generic environment, writes global config with interactive defaults",
+      "assertions": [
+        "~/.devin-autogit/config.json created",
+        "config records environment as generic/interactive",
+        "stderr prints instructions for wiring the ship step"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "setup-003-idempotent",
+      "category": "setup",
+      "command": "devin-autogit setup",
+      "setup_steps": [
+        "run `devin-autogit setup` once successfully first",
+        "run it a second time"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "second run succeeds without corrupting existing config",
+      "assertions": [
+        "~/.devin-autogit/config.json still valid JSON after second run",
+        "user-modified settings in global config are preserved"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "on-001-basic-enable",
+      "category": "on-off",
+      "command": "devin-autogit on",
+      "setup_steps": [
+        "git init repo with an initial commit",
+        "add local bare origin remote"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "enables auto-ship by writing .devin-autogit.json",
+      "assertions": [
+        ".devin-autogit.json exists in repo root and is valid JSON",
+        "config validates against the Zod repo schema",
+        "`devin-autogit status` afterwards reports enabled=true"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "on-002-noninteractive-fail-closed-defaults",
+      "category": "on-off",
+      "command": "devin-autogit on",
+      "setup_steps": [
+        "git init repo with initial commit and origin remote",
+        "export DEVIN_SESSION_ID=devin-abc123",
+        "invoke with stdin/stdout not a TTY"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "enables repo with fail-closed policy defaults for agent invocations",
+      "assertions": [
+        ".devin-autogit.json contains fail-closed defaults (protected branches include main and master, default deny globs present)",
+        "no interactive prompt is shown (command completes without stdin input)"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "on-003-policy-file",
+      "category": "on-off",
+      "command": "devin-autogit on --policy custom-policy.json",
+      "setup_steps": [
+        "git init repo with initial commit and origin remote",
+        "write custom-policy.json with { \"protectedBranches\": [\"release\"], \"denyGlobs\": [\"secrets/**\"] }"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "enables repo using the supplied policy file",
+      "assertions": [
+        ".devin-autogit.json reflects protectedBranches=[\"release\"] and denyGlobs including secrets/**"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "on-004-invalid-policy-file",
+      "category": "on-off",
+      "command": "devin-autogit on --policy bad-policy.json",
+      "setup_steps": [
+        "git init repo with initial commit",
+        "write bad-policy.json containing invalid JSON: `{ nope`"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "refuses to enable; configuration error",
+      "assertions": [
+        ".devin-autogit.json is NOT created",
+        "stderr explains the policy file failed to parse/validate"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "off-001-disable",
+      "category": "on-off",
+      "command": "devin-autogit off",
+      "setup_steps": [
+        "git init repo with .devin-autogit.json present (previously enabled)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "disables auto-ship",
+      "assertions": [
+        "repo is no longer enabled (config removed or marked disabled)",
+        "`devin-autogit status` afterwards reports enabled=false",
+        "subsequent `devin-autogit ship` is a silent no-op with exit 0"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "off-002-already-off",
+      "category": "on-off",
+      "command": "devin-autogit off",
+      "setup_steps": [
+        "git init repo with NO .devin-autogit.json"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "no-op; reports already disabled",
+      "assertions": [
+        "exit code is 0",
+        "stderr notes the repo was not enabled"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "status-001-json-output",
+      "category": "status",
+      "command": "devin-autogit status --json",
+      "setup_steps": [
+        "git init repo, enable via `devin-autogit on`",
+        "export DEVIN_SESSION_ID=devin-abc123"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "prints machine-readable status on stdout",
+      "assertions": [
+        "stdout parses as JSON",
+        "JSON includes version, enabled=true, devinSession detected with id devin-abc123, policy summary, heldChanges state, swarm branch info",
+        "no informational text on stdout besides the JSON"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "status-002-outside-repo",
+      "category": "status",
+      "command": "devin-autogit status",
+      "setup_steps": [
+        "run in a temp directory that is NOT a git repo"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "configuration/user error: not a git repository",
+      "assertions": [
+        "stderr says not inside a git repository",
+        "no stack trace is printed"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "doctor-001-healthy",
+      "category": "doctor",
+      "command": "devin-autogit doctor",
+      "setup_steps": [
+        "git init repo with initial commit, valid .devin-autogit.json",
+        "add reachable local bare origin remote",
+        "export DEVIN_SESSION_ID=devin-abc123"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "all diagnostics pass",
+      "assertions": [
+        "stderr reports git ok, remote reachable, Devin env detected, config valid",
+        "exit code 0"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "doctor-002-broken-remote-and-config",
+      "category": "doctor",
+      "command": "devin-autogit doctor",
+      "setup_steps": [
+        "git init repo, set origin to a nonexistent path (git remote add origin /nonexistent/bare.git)",
+        "write .devin-autogit.json containing invalid JSON"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "diagnostics report failures",
+      "assertions": [
+        "stderr flags remote unreachable",
+        "stderr flags config invalid",
+        "exit code 1"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "ship-001-happy-path",
+      "category": "ship-happy",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "git init repo with initial commit pushed to local bare origin",
+        "enable repo on branch devin/test/agent-1",
+        "export DEVIN_SESSION_ID=devin-abc123 DEVIN_TASK='add feature x'",
+        "create src/feature.ts with benign content"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship",
+      "assertions": [
+        "a new commit exists on HEAD containing src/feature.ts",
+        "commit body contains trailers Devin-Session: devin-abc123, Devin-Task, and Shipped-by: devin-autogit",
+        "origin branch devin/test/agent-1 points at the new commit",
+        "working tree is clean afterwards"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-002-custom-message",
+      "category": "ship-happy",
+      "command": "devin-autogit ship -m \"fix: adjust widget\"",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with origin",
+        "modify an existing tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship with user-provided subject",
+      "assertions": [
+        "commit subject is exactly 'fix: adjust widget'",
+        "trailers still appended to the body",
+        "pushed to origin"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "ship-003-clean-noop",
+      "category": "ship-happy",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo, working tree clean (no changes)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "clean no-op",
+      "assertions": [
+        "no new commit created",
+        "stderr notes nothing to ship",
+        "exit code 0 (never breaks the agent's turn)"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-004-dry-run",
+      "category": "ship-happy",
+      "command": "devin-autogit ship --dry-run --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with a modified file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "evaluates gates and reports what would ship without committing",
+      "assertions": [
+        "no commit is created and nothing is pushed",
+        "stdout JSON includes decision (would-ship) and the file list",
+        "working tree changes remain intact"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-005-json-schema",
+      "category": "ship-happy",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with a benign new file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship with golden machine-readable output",
+      "assertions": [
+        "stdout parses as JSON",
+        "JSON contains result=shipped, commit sha, branch, pushed=true, files list",
+        "all human-readable logging is on stderr only"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-001-not-enabled",
+      "category": "ship-hold",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "git init repo with a modified file, NO .devin-autogit.json"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "silent no-op (opt-in gate)",
+      "assertions": [
+        "no commit created, nothing pushed",
+        "exit code 0",
+        "with --json, stdout JSON reports result=skipped reason=not-enabled"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-002-secrets-aws-key",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1",
+        "create config.ts containing a realistic AWS access key line: aws_access_key_id = AKIAIOSFODNN7EXAMPLE plus a 40-char secret"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold",
+      "assertions": [
+        "no commit created, nothing pushed",
+        "changes remain in the working tree (not discarded), everything unstaged",
+        "stdout JSON reports result=held reason=secrets with the offending file/pattern",
+        "stderr explains the secrets hit"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-003-secrets-env-filename",
+      "category": "ship-hold",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1",
+        "create .env file containing API_KEY=sk-live-realvalue1234567890"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (sensitive filename)",
+      "assertions": [
+        "no commit created",
+        ".env content untouched in working tree",
+        "hold reason cites the sensitive filename"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-004-secrets-template-exempt",
+      "category": "ship-hold",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1",
+        "create .env.example containing API_KEY=your-key-here (placeholder in a template file)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship (template-file exemption applies)",
+      "assertions": [
+        "commit created and pushed including .env.example",
+        "no secrets hold triggered"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-005-protected-branch",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo checked out on branch main (in default autonomous protected list)",
+        "export DEVIN_SESSION_ID=devin-abc123, no TTY",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (protected branch in autonomous mode)",
+      "assertions": [
+        "no commit created, nothing pushed to main",
+        "stdout JSON reports result=held reason=protected-branch branch=main",
+        "changes remain in working tree"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-006-path-deny-glob",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with denyGlobs [\"infra/**\", \"**/*.pem\"]",
+        "create infra/prod.tf AND src/ok.ts in the same turn"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (a denied staged path holds the whole ship)",
+      "assertions": [
+        "no commit created — src/ok.ts is NOT shipped separately",
+        "stdout JSON reports result=held reason=path-policy with infra/prod.tf listed",
+        "both files remain in working tree"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-007-size-cap-files",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with default size cap (300 files)",
+        "script-create 301 small new files"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (file-count size cap)",
+      "assertions": [
+        "no commit created",
+        "stdout JSON reports result=held reason=size-cap with counts",
+        "files remain in working tree"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-008-size-cap-bytes",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with default 1 MB diff cap",
+        "create big.txt of 2 MB random-ish text"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (byte size cap)",
+      "assertions": [
+        "no commit created",
+        "stdout JSON reports result=held reason=size-cap",
+        "big.txt remains in working tree"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-009-llm-gate-no-key",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with llmGate enabled in config",
+        "unset any LLM API key env vars",
+        "modify a tracked file; autonomous (no TTY, DEVIN_SESSION_ID set)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (LLM gate unavailable, fail-closed)",
+      "assertions": [
+        "no commit created, nothing pushed",
+        "stdout JSON reports result=held reason=llm-gate-unavailable",
+        "stderr notes the gate could not run"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-010-llm-gate-timeout",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo with llmGate enabled, API endpoint pointed at a local server that never responds (or sleeps past the timeout)",
+        "modify a tracked file; autonomous mode"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold (LLM gate timeout, fail-closed)",
+      "assertions": [
+        "no commit created",
+        "result=held reason includes timeout/unavailable",
+        "secrets scan ran BEFORE the diff would have been sent (verify via ordering in logs)"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-011-force-secrets-refused-autonomous",
+      "category": "ship-hold",
+      "command": "devin-autogit ship --force-secrets --json",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1",
+        "create file with a real-looking GitHub token ghp_ followed by 36 alphanumerics",
+        "autonomous mode: DEVIN_SESSION_ID set, no TTY"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold — --force-secrets refused in autonomous mode",
+      "assertions": [
+        "no commit created despite --force-secrets",
+        "stdout JSON reports the override was refused (human TTY required)",
+        "changes remain in working tree"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "ship-hold-012-held-changes-reevaluated",
+      "category": "ship-hold",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "trigger a hold (e.g. size cap) with `devin-autogit ship` once",
+        "raise the size cap in .devin-autogit.json",
+        "run `devin-autogit ship` again"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "held changes are re-staged and shipped on the next ship once gates pass",
+      "assertions": [
+        "second ship creates one commit containing the previously held files",
+        "pushed to origin"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "undo-001-success-local-and-remote",
+      "category": "undo",
+      "command": "devin-autogit undo",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1; run a successful `devin-autogit ship` (commit has Shipped-by: devin-autogit trailer)",
+        "remote origin branch points at the shipped commit"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "remote rewind (force-with-lease to parent) then local mixed reset",
+      "assertions": [
+        "origin branch now points at the shipped commit's parent",
+        "local HEAD points at the parent",
+        "the shipped files are back in the working tree as uncommitted changes (mixed reset)"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "undo-002-refuse-foreign-commit",
+      "category": "undo",
+      "command": "devin-autogit undo",
+      "setup_steps": [
+        "enabled repo; make a manual commit with plain `git commit` (no devin-autogit trailers) and push"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "refuse — last commit was not made by devin-autogit",
+      "assertions": [
+        "no reset performed, HEAD unchanged",
+        "origin unchanged",
+        "stderr explains the last commit lacks the Shipped-by: devin-autogit trailer"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "undo-003-refuse-remote-moved-past",
+      "category": "undo",
+      "command": "devin-autogit undo",
+      "setup_steps": [
+        "ship a commit with devin-autogit",
+        "simulate another agent: clone origin elsewhere, add a new commit on top, push",
+        "run undo in the original checkout"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "refuse — remote has moved past the shipped commit",
+      "assertions": [
+        "origin history untouched (newer commit still present)",
+        "local HEAD unchanged",
+        "stderr explains the remote advanced beyond the shipped commit"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "undo-004-nothing-to-undo",
+      "category": "undo",
+      "command": "devin-autogit undo",
+      "setup_steps": [
+        "enabled repo with only the initial (non-autogit) commit"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "refuse — no devin-autogit commit to undo",
+      "assertions": [
+        "no git state changed",
+        "stderr says nothing to undo"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "checkpoint-001-create",
+      "category": "checkpoint",
+      "command": "devin-autogit checkpoint before-refactor",
+      "setup_steps": [
+        "enabled repo with at least one commit"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "creates a namespaced checkpoint ref",
+      "assertions": [
+        "a ref matching refs/devin-autogit/checkpoints/<ts> exists (git for-each-ref)",
+        "the ref points at current HEAD",
+        "label 'before-refactor' recorded (in ref name or annotation)",
+        "reflog untouched by checkpoint creation"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "checkpoint-002-ship-auto-checkpoint",
+      "category": "checkpoint",
+      "command": "devin-autogit ship --checkpoint",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1 with a benign modified file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "auto-checkpoints pre-ship state, then ships",
+      "assertions": [
+        "a checkpoint ref exists pointing at the pre-ship HEAD (the new commit's parent)",
+        "the ship commit exists and is pushed",
+        "checkpoint ref created before the push (pre-push state recoverable)"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "checkpoint-003-multiple",
+      "category": "checkpoint",
+      "command": "devin-autogit checkpoint",
+      "setup_steps": [
+        "create checkpoint, make a new commit, create a second checkpoint"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "checkpoints accumulate under distinct timestamped refs",
+      "assertions": [
+        "two distinct refs under refs/devin-autogit/checkpoints/",
+        "each points at the HEAD at time of creation"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "swarm-001-init",
+      "category": "swarm",
+      "command": "devin-autogit swarm init add-auth --agents 3",
+      "setup_steps": [
+        "enabled repo with initial commit and origin remote",
+        "export DEVIN_SESSION_ID=devin-abc123"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "creates 3 per-subagent worktrees and branches",
+      "assertions": [
+        "3 worktrees exist (git worktree list)",
+        "branches named devin/devin-abc123/agent-1..agent-3 exist",
+        "each worktree contains its own .devin-autogit.json (pre-enabled)",
+        "busy markers are isolated per worktree (marker dir resolves under each worktree's git dir)"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "swarm-002-collect-success",
+      "category": "swarm",
+      "command": "devin-autogit swarm collect --into integration",
+      "setup_steps": [
+        "run swarm init with 2 agents",
+        "in worktree 1: create fileA.ts and ship; in worktree 2: create fileB.ts and ship (non-overlapping changes)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "merges/rebases both subagent branches into integration branch",
+      "assertions": [
+        "integration branch contains fileA.ts and fileB.ts",
+        "both subagent commits (with their trailers) reachable from integration",
+        "no merge conflict markers in any file"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "swarm-003-collect-conflict-fail-closed",
+      "category": "swarm",
+      "command": "devin-autogit swarm collect --into integration --json",
+      "setup_steps": [
+        "run swarm init with 2 agents",
+        "both worktrees modify the SAME lines of shared.ts differently and ship"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold — fail-closed on merge conflict, no partial integration",
+      "assertions": [
+        "integration branch is left without conflict markers (merge aborted or never committed)",
+        "stdout JSON reports result=held reason=conflict naming the conflicting branch/files",
+        "subagent branches untouched"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "swarm-004-collect-partial-order",
+      "category": "swarm",
+      "command": "devin-autogit swarm collect --into integration",
+      "setup_steps": [
+        "swarm init with 3 agents; agents 1 and 3 ship non-conflicting work, agent 2 shipped nothing (branch equals base)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "collects branches with work, skips empty branches",
+      "assertions": [
+        "integration contains agent-1 and agent-3 changes",
+        "empty agent-2 branch skipped without error"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "devin-001-detect-env-var",
+      "category": "devin-detection",
+      "command": "devin-autogit status --json",
+      "setup_steps": [
+        "git repo without a .devin/ directory",
+        "export DEVIN_SESSION_ID=devin-xyz789"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "Devin session detected via env var",
+      "assertions": [
+        "status JSON reports devin.detected=true, source=env, sessionId=devin-xyz789"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "devin-002-detect-dot-devin-dir",
+      "category": "devin-detection",
+      "command": "devin-autogit status --json",
+      "setup_steps": [
+        "git repo containing an empty .devin/ directory",
+        "unset all DEVIN_* env vars"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "Devin session detected via .devin/ directory",
+      "assertions": [
+        "status JSON reports devin.detected=true, source=dot-devin-dir"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "devin-003-no-detection",
+      "category": "devin-detection",
+      "command": "devin-autogit status --json",
+      "setup_steps": [
+        "git repo with no .devin/, no DEVIN_* env vars, no VM markers"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "no Devin session detected; interactive defaults",
+      "assertions": [
+        "status JSON reports devin.detected=false",
+        "effective mode is interactive (not fail-closed autonomous)"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "devin-004-metadata-blueprint",
+      "category": "devin-metadata",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo on devin/sess/agent-1",
+        "write .devin/blueprint.yaml with repo conventions: protected_branches: [main, release/*], branch_prefix: devin/",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "blueprint conventions merged into effective config; ship proceeds on allowed branch",
+      "assertions": [
+        "status/ship JSON shows effective protected branches include release/* from blueprint",
+        "ship succeeds because current branch matches allowed prefix"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "devin-005-metadata-session-json",
+      "category": "devin-metadata",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo on devin/sess/agent-1",
+        "unset DEVIN_* env vars",
+        "write .devin/session.json: { \"sessionId\": \"devin-fromfile\", \"task\": \"Implement login form\" }",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "session ID and task read from session.json drive commit subject and trailers",
+      "assertions": [
+        "commit subject derived from 'Implement login form' (72-char capped)",
+        "trailer Devin-Session: devin-fromfile present",
+        "trailer Devin-Task present with a slug of the task"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "devin-006-metadata-invalid-yaml",
+      "category": "devin-metadata",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo; write .devin/blueprint.yaml with malformed YAML (e.g. unclosed bracket)",
+        "modify a tracked file; autonomous mode"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold — metadata unparseable is uncertainty; fail closed in autonomous mode",
+      "assertions": [
+        "no commit created",
+        "stdout JSON reports result=held reason mentioning invalid metadata",
+        "changes remain in working tree"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "trailer-001-formatting",
+      "category": "trailers",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo on devin/test/agent-1",
+        "export DEVIN_SESSION_ID=devin-abc123 DEVIN_TASK='Fix the flaky retry logic in HTTP client'",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship with correctly formatted trailers",
+      "assertions": [
+        "`git log -1 --format=%B` ends with a trailer block separated from the body by a blank line",
+        "`git interpret-trailers --parse` extracts Devin-Session, Devin-Task, Shipped-by keys",
+        "Devin-Session value is devin-abc123",
+        "Shipped-by value is devin-autogit",
+        "Devin-Task value is a short slug of the task"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "trailer-002-parse-roundtrip",
+      "category": "trailers",
+      "command": "devin-autogit undo",
+      "setup_steps": [
+        "ship a commit whose message body itself contains the literal text 'Shipped-by: devin-autogit' in a code block within the subject/body (crafted via -m)",
+        "then make a plain manual git commit on top"
+      ],
+      "expected_exit_code": 1,
+      "expected_behavior": "refuse — trailer parsing must use real trailer semantics, not substring match",
+      "assertions": [
+        "undo refuses because HEAD (the manual commit) has no genuine trailer",
+        "no git state changed"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "trailer-003-subject-72-char-cap",
+      "category": "trailers",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo, DEVIN_TASK set to a 200-character sentence with newlines",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "subject flattened and capped at 72 chars",
+      "assertions": [
+        "commit subject length <= 72",
+        "subject contains no newline characters",
+        "full trailers intact in body"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "nff-001-self-heal-rebase-retry",
+      "category": "non-fast-forward",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo A on devin/test/agent-1 pushed to bare origin",
+        "clone origin to repo B, commit a non-conflicting change to the same branch, push from B",
+        "in repo A: modify a different file, run ship (push will initially be rejected non-fast-forward)"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship — fetch, rebase onto updated remote, retry push",
+      "assertions": [
+        "origin branch contains BOTH repo B's commit and repo A's new commit",
+        "repo A's commit is rebased on top (linear history, no merge commit)",
+        "exit code 0"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "nff-002-rebase-conflict-hold",
+      "category": "non-fast-forward",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "same as nff-001 but repo B's pushed commit modifies the SAME lines repo A changed"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold — rebase conflict cannot be auto-resolved, fail closed",
+      "assertions": [
+        "rebase aborted; repo A left in a non-conflicted state with local changes preserved",
+        "nothing force-pushed to origin",
+        "stdout JSON reports result=held reason=rebase-conflict"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "mode-001-autonomous-defaults",
+      "category": "autonomous-vs-interactive",
+      "command": "devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo checked out on main",
+        "DEVIN_SESSION_ID set, stdin/stdout are NOT a TTY",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold — autonomous mode protects main by default",
+      "assertions": [
+        "JSON reports mode=autonomous",
+        "result=held reason=protected-branch"
+      ],
+      "autonomous": true
+    },
+    {
+      "id": "mode-002-interactive-defaults",
+      "category": "autonomous-vs-interactive",
+      "command": "devin-autogit ship",
+      "setup_steps": [
+        "enabled repo checked out on main, config does NOT list main as protected for interactive use",
+        "no DEVIN_* env vars, run under a PTY (interactive)",
+        "modify a tracked file"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship — interactive human defaults are not autonomous-protected",
+      "assertions": [
+        "commit created and pushed to main",
+        "status/ship reports mode=interactive"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "mode-003-force-secrets-allowed-interactive",
+      "category": "autonomous-vs-interactive",
+      "command": "devin-autogit ship --force-secrets",
+      "setup_steps": [
+        "enabled repo on a feature branch, no Devin detection, run under a PTY",
+        "create a file with a placeholder-looking but flagged token"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "ship — a human at a TTY may override the secrets gate",
+      "assertions": [
+        "commit created and pushed despite the secrets flag",
+        "stderr warns that the secrets gate was overridden"
+      ],
+      "autonomous": false
+    },
+    {
+      "id": "mode-004-env-override-precedence",
+      "category": "autonomous-vs-interactive",
+      "command": "DEVIN_AUTOGIT_MAX_FILES=5 devin-autogit ship --json",
+      "setup_steps": [
+        "enabled repo whose .devin-autogit.json sets maxFiles=300",
+        "create 6 new files"
+      ],
+      "expected_exit_code": 0,
+      "expected_behavior": "hold — env override (env > repo > global > defaults) lowers the cap to 5",
+      "assertions": [
+        "result=held reason=size-cap",
+        "JSON shows effective maxFiles=5"
+      ],
+      "autonomous": true
+    }
+  ]
+}

@@ -116,10 +116,10 @@ const swarm = program
 swarm
   .command('init')
   .description('Create per-subagent worktrees and branches')
-  .argument('<task>', 'task description for the swarm')
+  .argument('[task]', 'task description for the swarm (used as the branch base)')
   .option('--agents <n>', 'number of subagents', (v) => Number.parseInt(v, 10), 2)
   .option('--session <id>', 'Devin session ID (defaults to detected session)')
-  .action((task: string, opts: { agents: number; session?: string }) => {
+  .action((task: string | undefined, opts: { agents: number; session?: string }) => {
     process.exitCode = runSwarmInit(task, {
       ...globalOpts(),
       agents: opts.agents,
@@ -131,11 +131,13 @@ swarm
   .command('collect')
   .description('Merge completed subagent branches into an integration branch')
   .option('--into <branch>', 'integration branch name')
+  .option('--task <task>', 'task description used at swarm init (branch base)')
   .option('--session <id>', 'Devin session ID (defaults to detected session)')
-  .action((opts: { into?: string; session?: string }) => {
+  .action((opts: { into?: string; session?: string; task?: string }) => {
     process.exitCode = runSwarmCollect({
       ...globalOpts(),
       into: opts.into,
+      task: opts.task,
       session: opts.session,
     });
   });

@@ -41,7 +41,7 @@ devin-autogit ship -m "msg"    # stage → scan → gate → commit → push
 | `undo`                                                     | Rewind the last devin-autogit commit (remote force-with-lease + local mixed reset)    |
 | `status`                                                   | Version, enablement, Devin detection, policy summary, swarm info (`--json` supported) |
 | `checkpoint [label]`                                       | Record a `refs/devin-autogit/checkpoints/<timestamp>[-label]` ref                     |
-| `swarm init <task> [--agents N]`                           | Create per-subagent worktrees + branches `devin/<session>/<agent-n>`                  |
+| `swarm init [task] [--agents N]`                           | Create per-subagent worktrees + branches `devin/<task-slug>/agent-<n>`                |
 | `swarm collect [--into <branch>]`                          | Merge shipped subagent branches into an integration branch, fail-closed on conflicts  |
 | `doctor`                                                   | Diagnose git auth, remote access, Devin env detection, config validity                |
 

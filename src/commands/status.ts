@@ -33,12 +33,24 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
   const out = new Output({ json: opts.json });
   const git = new Git(cwd);
   const version = packageVersion();
+  if (git.isBareRepo()) {
+    out.error('bare repository — work tree required');
+    out.result({ ok: false, action: 'status', version, repo: null });
+    return EXIT_CONFIG_ERROR;
+  }
   const inRepo = git.isRepo();
   const root = inRepo ? git.repoRoot() : null;
   if (root === null) {
     out.error('not inside a git repository');
-    out.result({ ok: false, action: 'status', version, repo: null });
-    return EXIT_CONFIG_ERROR;
+    out.result({
+      ok: true,
+      action: 'status',
+      version,
+      enabled: false,
+      devinDetected: false,
+      repo: null,
+    });
+    return EXIT_OK;
   }
   const detection = detectDevinSession({ repoRoot: root });
 

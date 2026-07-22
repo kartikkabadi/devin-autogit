@@ -1,7 +1,7 @@
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cli, cliJson, enable, git, makeFixture, type Fixture } from './helpers.js';
+import { cliJson, enable, git, makeFixture, type Fixture } from './helpers.js';
 
 let fix: Fixture;
 
@@ -14,8 +14,8 @@ describe('swarm (integration)', () => {
     fix = makeFixture({ devin: true });
     const result = cliJson(fix, ['swarm', 'init', 'Split the work', '--agents', '2']);
     expect(result['branches']).toEqual([
-      'devin/devin-test-session/agent-1',
-      'devin/devin-test-session/agent-2',
+      'devin/split-the-work/agent-1',
+      'devin/split-the-work/agent-2',
     ]);
     const worktrees = result['worktrees'] as string[];
     expect(worktrees).toHaveLength(2);
@@ -38,10 +38,17 @@ describe('swarm (integration)', () => {
     git(fix, ['add', '-A'], worktrees[1]);
     git(fix, ['commit', '-m', 'agent 2 unfinished'], worktrees[1]);
 
-    const result = cliJson(fix, ['swarm', 'collect', '--into', 'devin/integration']);
-    expect(result['merged']).toEqual(['devin/devin-test-session/agent-1']);
+    const result = cliJson(fix, [
+      'swarm',
+      'collect',
+      '--task',
+      'Split the work',
+      '--into',
+      'devin/integration',
+    ]);
+    expect(result['merged']).toEqual(['devin/split-the-work/agent-1']);
     const skipped = result['skipped'] as Array<{ branch: string }>;
-    expect(skipped.map((s) => s.branch)).toContain('devin/devin-test-session/agent-2');
+    expect(skipped.map((s) => s.branch)).toContain('devin/split-the-work/agent-2');
 
     git(fix, ['checkout', 'devin/integration']);
     expect(existsSync(join(fix.repo, 'agent1.ts'))).toBe(true);
@@ -59,18 +66,32 @@ describe('swarm (integration)', () => {
       git(fix, ['commit', '-m', `agent ${i}\n\nShipped-by: devin-autogit`], wt);
     }
 
-    const result = cliJson(fix, ['swarm', 'collect', '--into', 'devin/integration']);
-    expect(result['merged']).toEqual(['devin/devin-test-session/agent-1']);
-    expect(result['conflicts']).toEqual(['devin/devin-test-session/agent-2']);
+    const result = cliJson(fix, [
+      'swarm',
+      'collect',
+      '--task',
+      'Conflicting work',
+      '--into',
+      'devin/integration',
+    ]);
+    expect(result['merged']).toEqual(['devin/conflicting-work/agent-1']);
+    expect(result['conflicts']).toEqual(['devin/conflicting-work/agent-2']);
     // merge was aborted — no conflict markers left behind
     const status = git(fix, ['status', '--porcelain']);
     expect(status.stdout.trim()).toBe('');
   });
 
-  it('init requires a session id', () => {
+  it('init works standalone with a task and no session id', () => {
     fix = makeFixture();
-    const res = cli(fix, ['swarm', 'init', 'No session']);
-    expect(res.code).toBe(1);
-    expect(res.stderr).toContain('session');
+    const result = cliJson(fix, ['swarm', 'init', 'No session', '--agents', '1']);
+    expect(result['branches']).toEqual(['devin/no-session/agent-1']);
+  });
+
+  it('init falls back to a generated base without task or session id', () => {
+    fix = makeFixture();
+    const result = cliJson(fix, ['swarm', 'init', '--agents', '1']);
+    const branches = result['branches'] as string[];
+    expect(branches).toHaveLength(1);
+    expect(branches[0]).toMatch(/^devin\/swarm-[a-z0-9]+\/agent-1$/);
   });
 });

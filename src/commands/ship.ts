@@ -26,6 +26,10 @@ function holdReason(gate: string | undefined): string {
 export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
   const out = new Output({ json: opts.json, quiet: opts.quiet ?? false });
   const git = new Git(cwd);
+  if (git.isBareRepo()) {
+    out.error('bare repository — work tree required');
+    return EXIT_CONFIG_ERROR;
+  }
   if (!git.isRepo()) {
     out.error('not inside a git repository');
     return EXIT_CONFIG_ERROR;
@@ -159,6 +163,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       action: 'ship',
       shipped: false,
       dryRun: true,
+      reason: null,
       subject,
       branch,
       files: stagedFiles,
@@ -184,6 +189,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       action: 'ship',
       shipped: true,
       pushed: false,
+      reason: null,
       subject,
       branch,
       sha: git.headSha(),
@@ -240,6 +246,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     shipped: true,
     pushed: true,
     rebased,
+    reason: null,
     subject,
     branch,
     sha: git.headSha(),

@@ -16,6 +16,11 @@ export interface ShipOptions {
   remote: string;
 }
 
+function holdReason(gate: string | undefined): string {
+  if (gate === 'llm') return 'llm-gate-unavailable';
+  return gate ?? 'policy';
+}
+
 export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
   const out = new Output({ json: opts.json });
   const git = new Git(cwd);
@@ -118,8 +123,9 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       shipped: false,
       held: true,
       result: 'held',
-      reason: decision.holds[0]?.gate ?? 'policy',
+      reason: holdReason(decision.holds[0]?.gate),
       holds: decision.holds,
+      protectedBranches: policy.protectedBranches,
       autonomous: detection.autonomous,
     });
     return EXIT_OK;
@@ -230,6 +236,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     branch,
     sha: git.headSha(),
     files: stagedFiles,
+    protectedBranches: policy.protectedBranches,
   });
   return EXIT_OK;
 }

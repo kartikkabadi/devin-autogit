@@ -9,6 +9,7 @@ import { runStatus, packageVersion } from './commands/status.js';
 import { runCheckpoint } from './commands/checkpoint.js';
 import { runSwarmInit, runSwarmCollect } from './commands/swarm.js';
 import { runDoctor } from './commands/doctor.js';
+import { runHookInstall, runHookUninstall } from './commands/hook.js';
 
 const program = new Command();
 
@@ -41,11 +42,13 @@ program
   .description('Enable auto-ship in the current repo')
   .option('--policy <file>', 'policy file to use')
   .option('--public-ok', 'allow enabling on a public repo')
-  .action((opts: { policy?: string; publicOk?: boolean }) => {
+  .option('--with-hooks', 'also install the Devin CLI Stop hook to auto-ship each turn')
+  .action((opts: { policy?: string; publicOk?: boolean; withHooks?: boolean }) => {
     process.exitCode = runOn({
       ...globalOpts(),
       policy: opts.policy,
       publicOk: opts.publicOk ?? false,
+      withHooks: opts.withHooks ?? false,
     });
   });
 
@@ -60,14 +63,22 @@ program
   .command('ship')
   .description('Stage → secrets scan → policy gate → commit → push')
   .option('-m, --message <msg>', 'commit message')
+  .option('--quiet', 'suppress non-error stderr output (for use inside hooks)')
   .option('--force-secrets', 'override a secrets hold (refused in autonomous mode)')
   .option('--checkpoint', 'record a checkpoint ref before pushing')
   .option('--remote <name>', 'remote to push to', 'origin')
   .action(
-    (opts: { message?: string; forceSecrets?: boolean; checkpoint?: boolean; remote: string }) => {
+    (opts: {
+      message?: string;
+      quiet?: boolean;
+      forceSecrets?: boolean;
+      checkpoint?: boolean;
+      remote: string;
+    }) => {
       process.exitCode = runShip({
         ...globalOpts(),
         message: opts.message,
+        quiet: opts.quiet ?? false,
         forceSecrets: opts.forceSecrets ?? false,
         checkpoint: opts.checkpoint ?? false,
         remote: opts.remote,
@@ -127,6 +138,27 @@ swarm
       into: opts.into,
       session: opts.session,
     });
+  });
+
+const hook = program
+  .command('hook')
+  .description('Manage the Devin CLI hook that auto-ships after each assistant turn');
+
+hook
+  .command('install')
+  .description('Install the Stop/SessionEnd auto-ship hook into .devin/hooks.v1.json')
+  .option('--bin <path>', 'command to invoke devin-autogit from the hook')
+  .option('--file <path>', 'hooks file to write (default: <repoRoot>/.devin/hooks.v1.json)')
+  .action((opts: { bin?: string; file?: string }) => {
+    process.exitCode = runHookInstall({ ...globalOpts(), bin: opts.bin, file: opts.file });
+  });
+
+hook
+  .command('uninstall')
+  .description('Remove the devin-autogit auto-ship hook entries')
+  .option('--file <path>', 'hooks file to edit (default: <repoRoot>/.devin/hooks.v1.json)')
+  .action((opts: { file?: string }) => {
+    process.exitCode = runHookUninstall({ ...globalOpts(), file: opts.file });
   });
 
 program

@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { execSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
+  Git,
+  addToInfoExclude,
   buildCommitMessage,
   deriveSubject,
   formatTrailers,
@@ -55,5 +61,24 @@ describe('deriveSubject', () => {
 
   it('has a last-resort subject for empty inputs', () => {
     expect(deriveSubject(undefined, undefined, [])).toBe('devin-autogit: update');
+  });
+});
+
+describe('addToInfoExclude', () => {
+  let dir: string;
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('appends a pattern once, idempotently', () => {
+    dir = mkdtempSync(join(tmpdir(), 'devin-autogit-exclude-'));
+    execSync('git init', { cwd: dir });
+    const git = new Git(dir);
+    expect(addToInfoExclude(git, dir, '/.devin-autogit.json')).toBe(true);
+    expect(addToInfoExclude(git, dir, '/.devin-autogit.json')).toBe(true);
+    const exclude = readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8');
+    expect(exclude.match(/\/\.devin-autogit\.json/g)).toHaveLength(1);
+    expect(exclude.endsWith('/.devin-autogit.json\n')).toBe(true);
   });
 });

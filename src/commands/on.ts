@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Git, sanitizeRemoteUrl } from '../core/git.js';
+import { Git, addToInfoExclude, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, REPO_CONFIG_FILENAME, repoConfigSchema } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
 import { runHookInstall } from './hook.js';
@@ -66,6 +66,7 @@ export function runOn(opts: OnOptions, cwd = process.cwd()): number {
   const existed = existsSync(path);
   if (!opts.dryRun) {
     writeFileSync(path, JSON.stringify(config.data, null, 2) + '\n');
+    addToInfoExclude(git, root, `/${REPO_CONFIG_FILENAME}`);
   }
   out.info(
     `${opts.dryRun ? 'would write' : existed ? 'updated' : 'wrote'} ${path} — auto-ship enabled`,

@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 export interface GitResult {
   ok: boolean;
@@ -76,6 +78,10 @@ export class Git {
 
   unstageAll(): GitResult {
     return this.exec(['reset']);
+  }
+
+  unstage(paths: string[]): GitResult {
+    return this.exec(['reset', '--', ...paths]);
   }
 
   stagedFiles(): string[] {
@@ -204,6 +210,24 @@ export class Git {
 
   mixedReset(ref: string): GitResult {
     return this.exec(['reset', '--mixed', ref]);
+  }
+}
+
+/** Append a pattern to <git-common-dir>/info/exclude. Idempotent; returns false on failure. */
+export function addToInfoExclude(git: Git, workdir: string, pattern: string): boolean {
+  const common = git.gitDir();
+  if (common === null) return false;
+  const infoDir = resolve(workdir, common, 'info');
+  const excludePath = join(infoDir, 'exclude');
+  try {
+    mkdirSync(infoDir, { recursive: true });
+    const current = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : '';
+    if (current.split('\n').includes(pattern)) return true;
+    const prefix = current.length === 0 || current.endsWith('\n') ? '' : '\n';
+    appendFileSync(excludePath, `${prefix}${pattern}\n`);
+    return true;
+  } catch {
+    return false;
   }
 }
 

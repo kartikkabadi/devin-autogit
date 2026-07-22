@@ -66,6 +66,40 @@ describe('hook install / uninstall', () => {
   });
 });
 
+describe('.git/info/exclude', () => {
+  const readExclude = (repo: string): string =>
+    readFileSync(join(repo, '.git', 'info', 'exclude'), 'utf8');
+
+  it('on adds /.devin-autogit.json to .git/info/exclude', () => {
+    const fix = makeFixture();
+    cli(fix, ['on', '--public-ok']);
+    expect(readExclude(fix.repo)).toContain('/.devin-autogit.json\n');
+  });
+
+  it('hook install adds /.devin/hooks.v1.json to .git/info/exclude', () => {
+    const fix = makeFixture();
+    cli(fix, ['hook', 'install', '--bin', `node ${CLI}`]);
+    expect(readExclude(fix.repo)).toContain('/.devin/hooks.v1.json\n');
+  });
+
+  it('exclude entries are idempotent', () => {
+    const fix = makeFixture();
+    cli(fix, ['on', '--public-ok', '--with-hooks']);
+    cli(fix, ['on', '--public-ok', '--with-hooks']);
+    const exclude = readExclude(fix.repo);
+    expect(exclude.match(/\/\.devin-autogit\.json/g)).toHaveLength(1);
+    expect(exclude.match(/\/\.devin\/hooks\.v1\.json/g)).toHaveLength(1);
+  });
+
+  it('dry-run does not touch .git/info/exclude', () => {
+    const fix = makeFixture();
+    cli(fix, ['on', '--public-ok', '--with-hooks', '--dry-run']);
+    const exclude = readExclude(fix.repo);
+    expect(exclude).not.toContain('.devin-autogit.json');
+    expect(exclude).not.toContain('hooks.v1.json');
+  });
+});
+
 describe('on --with-hooks / off', () => {
   it('on --with-hooks installs hooks and records hooks:true', () => {
     const fix = makeFixture();

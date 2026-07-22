@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, unlinkSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Git } from '../core/git.js';
+import { Git, addToInfoExclude } from '../core/git.js';
 import { ConfigError } from '../core/config.js';
 import {
   hooksFilePath,
@@ -88,7 +88,10 @@ export function runHookInstall(opts: HookInstallOptions, cwd = process.cwd()): n
     out.result({ ok: true, action: 'hook-install', installed: [], path: target.path, command });
     return EXIT_OK;
   }
-  if (!opts.dryRun) writeHooksFile(target.path, next);
+  if (!opts.dryRun) {
+    writeHooksFile(target.path, next);
+    excludeHooksFileFromTracking(cwd, target.path);
+  }
   out.info(
     `${opts.dryRun ? 'would install' : 'installed'} ${installed.join(', ')} hook(s) in ${target.path}`,
   );
@@ -101,6 +104,16 @@ export function runHookInstall(opts: HookInstallOptions, cwd = process.cwd()): n
     dryRun: opts.dryRun,
   });
   return EXIT_OK;
+}
+
+/** Keep the hooks file local-only via .git/info/exclude when it lives inside the repo. */
+function excludeHooksFileFromTracking(cwd: string, hooksPath: string): void {
+  const git = new Git(cwd);
+  const root = git.isRepo() ? git.repoRoot() : null;
+  if (root === null) return;
+  const rel = relative(root, hooksPath);
+  if (rel.startsWith('..') || rel.length === 0) return;
+  addToInfoExclude(git, root, `/${rel.split(sep).join('/')}`);
 }
 
 export function runHookUninstall(opts: HookUninstallOptions, cwd = process.cwd()): number {

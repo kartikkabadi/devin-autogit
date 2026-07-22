@@ -35,6 +35,7 @@ export const repoConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
     publicOk: z.boolean().default(false),
+    hooks: z.boolean().optional(),
     policy: policyConfigSchema.default({}),
   })
   .strict();

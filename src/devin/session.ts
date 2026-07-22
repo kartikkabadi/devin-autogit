@@ -4,6 +4,8 @@ import { join } from 'node:path';
 export interface SessionDetection {
   isDevin: boolean;
   sessionId: string | null;
+  /** Task description from the DEVIN_TASK environment variable. */
+  task: string | null;
   /** Fail-closed autonomous mode: Devin detected and no interactive TTY. */
   autonomous: boolean;
   signals: string[];
@@ -26,6 +28,9 @@ export function detectDevinSession(opts: DetectOptions = {}): SessionDetection {
   const signals: string[] = [];
   let sessionId: string | null = null;
 
+  const envTask = env['DEVIN_TASK'];
+  const task = envTask && envTask.trim().length > 0 ? envTask.trim() : null;
+
   for (const name of SESSION_ENV_VARS) {
     const value = env[name];
     if (value && value.trim().length > 0) {
@@ -46,6 +51,7 @@ export function detectDevinSession(opts: DetectOptions = {}): SessionDetection {
   return {
     isDevin,
     sessionId,
+    task,
     autonomous: isDevin && !isTty,
     signals,
   };

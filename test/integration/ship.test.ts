@@ -18,6 +18,7 @@ describe('ship (integration)', () => {
     const result = cliJson(fix, ['ship', '-m', 'Add feature']);
     expect(result['shipped']).toBe(true);
     expect(result['pushed']).toBe(true);
+    expect(result['reason']).toBeNull();
     expect(result['subject']).toBe('Add feature');
 
     const log = git(fix, ['log', '-1', '--format=%B']);

@@ -12,26 +12,32 @@ export interface JsonResult {
 
 export interface OutputOptions {
   json: boolean;
+  /** Suppress non-error stderr output (info/warn); errors still print. */
+  quiet?: boolean;
   stderr?: (line: string) => void;
   stdout?: (line: string) => void;
 }
 
 export class Output {
   readonly json: boolean;
+  private readonly quiet: boolean;
   private readonly writeErr: (line: string) => void;
   private readonly writeOut: (line: string) => void;
 
   constructor(opts: OutputOptions) {
     this.json = opts.json;
+    this.quiet = opts.quiet ?? false;
     this.writeErr = opts.stderr ?? ((line) => process.stderr.write(line + '\n'));
     this.writeOut = opts.stdout ?? ((line) => process.stdout.write(line + '\n'));
   }
 
   info(message: string): void {
+    if (this.quiet) return;
     this.writeErr(`devin-autogit: ${message}`);
   }
 
   warn(message: string): void {
+    if (this.quiet) return;
     this.writeErr(`devin-autogit: warning: ${message}`);
   }
 

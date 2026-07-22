@@ -1,5 +1,6 @@
 import { Git, buildCommitMessage, deriveSubject, sanitizeRemoteUrl } from '../core/git.js';
-import { ConfigError, resolveConfig } from '../core/config.js';
+import { ConfigError, REPO_CONFIG_FILENAME, resolveConfig } from '../core/config.js';
+import { HOOKS_FILE_RELPATH } from '../core/hooks.js';
 import { evaluatePolicy } from '../core/policy.js';
 import { scanAddedLines } from '../core/secrets.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
@@ -11,6 +12,7 @@ export interface ShipOptions {
   json: boolean;
   dryRun: boolean;
   message?: string;
+  quiet?: boolean;
   forceSecrets: boolean;
   checkpoint: boolean;
   remote: string;
@@ -22,7 +24,7 @@ function holdReason(gate: string | undefined): string {
 }
 
 export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
-  const out = new Output({ json: opts.json });
+  const out = new Output({ json: opts.json, quiet: opts.quiet ?? false });
   const git = new Git(cwd);
   if (!git.isRepo()) {
     out.error('not inside a git repository');
@@ -89,6 +91,10 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     out.error(`git add failed: ${stage.stderr.trim()}`);
     return EXIT_CONFIG_ERROR;
   }
+
+  // Defensive: never ship the autogit config or hooks file, even in repos
+  // enabled before these were added to .git/info/exclude.
+  git.unstage([REPO_CONFIG_FILENAME, HOOKS_FILE_RELPATH]);
 
   const stagedFiles = git.stagedFiles();
   if (stagedFiles.length === 0) {
@@ -184,10 +190,11 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     return EXIT_OK;
   }
 
-  const { result: push, rebased, rebaseConflict } = git.pushWithRebaseRetry(
-    opts.remote,
-    branch as string,
-  );
+  const {
+    result: push,
+    rebased,
+    rebaseConflict,
+  } = git.pushWithRebaseRetry(opts.remote, branch as string);
   if (!push.ok) {
     if (rebaseConflict) {
       out.warn('rebase conflict — cannot auto-resolve, holding (fail-closed)');

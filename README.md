@@ -30,18 +30,20 @@ devin-autogit ship -m "msg"    # stage → scan → gate → commit → push
 
 ## Commands
 
-| Command                                          | Description                                                                           |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| `setup`                                          | Detect environment (Devin vs. generic) and write the global config                    |
-| `on [--policy <file>] [--public-ok]`             | Enable auto-ship in the current repo; warns on public remotes unless `--public-ok`    |
-| `off`                                            | Disable auto-ship (removes `.devin-autogit.json`)                                     |
-| `ship [-m msg] [--checkpoint] [--force-secrets]` | Stage → secrets scan → policy gate → commit (Devin trailers) → push with rebase-retry |
-| `undo`                                           | Rewind the last devin-autogit commit (remote force-with-lease + local mixed reset)    |
-| `status`                                         | Version, enablement, Devin detection, policy summary, swarm info (`--json` supported) |
-| `checkpoint [label]`                             | Record a `refs/devin-autogit/checkpoints/<timestamp>[-label]` ref                     |
-| `swarm init <task> [--agents N]`                 | Create per-subagent worktrees + branches `devin/<session>/<agent-n>`                  |
-| `swarm collect [--into <branch>]`                | Merge shipped subagent branches into an integration branch, fail-closed on conflicts  |
-| `doctor`                                         | Diagnose git auth, remote access, Devin env detection, config validity                |
+| Command                                                    | Description                                                                           |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `setup`                                                    | Detect environment (Devin vs. generic) and write the global config                    |
+| `on [--policy <file>] [--public-ok] [--with-hooks]`        | Enable auto-ship in the current repo; `--with-hooks` also installs the Devin CLI hook |
+| `off`                                                      | Disable auto-ship (removes `.devin-autogit.json` and any installed Devin CLI hook)    |
+| `ship [-m msg] [--quiet] [--checkpoint] [--force-secrets]` | Stage → secrets scan → policy gate → commit (Devin trailers) → push with rebase-retry |
+| `hook install [--bin <path>] [--file <path>]`              | Install a Devin CLI `Stop`/`SessionEnd` hook that runs `ship` after each turn         |
+| `hook uninstall [--file <path>]`                           | Remove the devin-autogit hook entries from `.devin/hooks.v1.json`                     |
+| `undo`                                                     | Rewind the last devin-autogit commit (remote force-with-lease + local mixed reset)    |
+| `status`                                                   | Version, enablement, Devin detection, policy summary, swarm info (`--json` supported) |
+| `checkpoint [label]`                                       | Record a `refs/devin-autogit/checkpoints/<timestamp>[-label]` ref                     |
+| `swarm init <task> [--agents N]`                           | Create per-subagent worktrees + branches `devin/<session>/<agent-n>`                  |
+| `swarm collect [--into <branch>]`                          | Merge shipped subagent branches into an integration branch, fail-closed on conflicts  |
+| `doctor`                                                   | Diagnose git auth, remote access, Devin env detection, config validity                |
 
 Global flags: `--json` (machine-readable result on stdout; all logs go to stderr) and
 `--dry-run` (show what would happen without changing anything).

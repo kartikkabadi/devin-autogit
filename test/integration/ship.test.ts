@@ -30,6 +30,35 @@ describe('ship (integration)', () => {
     expect(remote.stdout).toContain(local.stdout.trim());
   });
 
+  it('does not commit the autogit config or hooks file', () => {
+    fix = makeFixture({ devin: true });
+    cli(fix, ['on', '--public-ok', '--with-hooks']);
+    writeFileSync(join(fix.repo, 'feature.ts'), 'export const x = 1;\n');
+
+    const result = cliJson(fix, ['ship', '-m', 'Add feature']);
+    expect(result['shipped']).toBe(true);
+    expect(result['files']).toEqual(['feature.ts']);
+
+    const tree = git(fix, ['ls-tree', '-r', '--name-only', 'HEAD']);
+    expect(tree.stdout).not.toContain('.devin-autogit.json');
+    expect(tree.stdout).not.toContain('hooks.v1.json');
+  });
+
+  it('unstages config/hooks files even without exclude entries (pre-fix repos)', () => {
+    fix = makeFixture({ devin: true });
+    cli(fix, ['on', '--public-ok', '--with-hooks']);
+    rmSync(join(fix.repo, '.git', 'info', 'exclude'), { force: true });
+    writeFileSync(join(fix.repo, 'feature.ts'), 'export const x = 1;\n');
+
+    const result = cliJson(fix, ['ship', '-m', 'Add feature']);
+    expect(result['shipped']).toBe(true);
+    expect(result['files']).toEqual(['feature.ts']);
+
+    const tree = git(fix, ['ls-tree', '-r', '--name-only', 'HEAD']);
+    expect(tree.stdout).not.toContain('.devin-autogit.json');
+    expect(tree.stdout).not.toContain('hooks.v1.json');
+  });
+
   it('is a clean no-op when not enabled', () => {
     fix = makeFixture();
     writeFileSync(join(fix.repo, 'x.ts'), 'export {};\n');

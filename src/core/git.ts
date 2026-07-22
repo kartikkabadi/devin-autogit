@@ -25,6 +25,20 @@ export function runGit(args: string[], cwd?: string): GitResult {
   };
 }
 
+/** Reject user-supplied values that could be parsed as git options. */
+export function isSafeGitArg(value: string): boolean {
+  return value.length > 0 && !value.startsWith('-');
+}
+
+function unsafeArgResult(what: string, value: string): GitResult {
+  return { ok: false, code: -1, stdout: '', stderr: `refusing unsafe ${what}: "${value}"` };
+}
+
+/** Strip userinfo (credentials) from URLs embedded in text. */
+export function sanitizeRemoteUrl(text: string): string {
+  return text.replace(/(\/\/)[^@/\s]+@/g, '$1');
+}
+
 export class Git {
   constructor(
     private readonly cwd: string,
@@ -60,23 +74,32 @@ export class Git {
     return this.exec(['add', '-A']);
   }
 
+  unstageAll(): GitResult {
+    return this.exec(['reset']);
+  }
+
   stagedFiles(): string[] {
     const res = this.exec(['diff', '--cached', '--name-only', '-z']);
     if (!res.ok) return [];
     return res.stdout.split('\0').filter((f) => f.length > 0);
   }
 
-  /** Added lines from the staged diff, as [file, line] pairs. */
-  stagedAddedLines(): Array<{ file: string; line: string }> {
+  /** Added lines from the staged diff, with new-file line numbers. */
+  stagedAddedLines(): Array<{ file: string; line: string; lineNumber: number }> {
     const res = this.exec(['diff', '--cached', '--unified=0']);
     if (!res.ok) return [];
-    const out: Array<{ file: string; line: string }> = [];
+    const out: Array<{ file: string; line: string; lineNumber: number }> = [];
     let currentFile = '';
+    let lineNumber = 0;
     for (const raw of res.stdout.split('\n')) {
+      const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(raw);
       if (raw.startsWith('+++ b/')) {
         currentFile = raw.slice(6);
+      } else if (hunk) {
+        lineNumber = Number.parseInt(hunk[1] as string, 10);
       } else if (raw.startsWith('+') && !raw.startsWith('+++')) {
-        out.push({ file: currentFile, line: raw.slice(1) });
+        out.push({ file: currentFile, line: raw.slice(1), lineNumber });
+        lineNumber += 1;
       }
     }
     return out;
@@ -101,23 +124,28 @@ export class Git {
   }
 
   push(remote: string, branch: string): GitResult {
-    return this.exec(['push', remote, `HEAD:refs/heads/${branch}`]);
+    if (!isSafeGitArg(remote)) return unsafeArgResult('remote', remote);
+    if (!isSafeGitArg(branch)) return unsafeArgResult('branch', branch);
+    return this.exec(['push', '--', remote, `HEAD:refs/heads/${branch}`]);
   }
 
   /** Push with a single fetch + rebase + retry on non-fast-forward rejection. */
-  pushWithRebaseRetry(remote: string, branch: string): { result: GitResult; rebased: boolean } {
+  pushWithRebaseRetry(
+    remote: string,
+    branch: string,
+  ): { result: GitResult; rebased: boolean; rebaseConflict: boolean } {
     const first = this.push(remote, branch);
-    if (first.ok) return { result: first, rebased: false };
+    if (first.ok) return { result: first, rebased: false, rebaseConflict: false };
     const rejected = /non-fast-forward|fetch first|\[rejected\]/i.test(first.stderr + first.stdout);
-    if (!rejected) return { result: first, rebased: false };
-    const fetch = this.exec(['fetch', remote, branch]);
-    if (!fetch.ok) return { result: first, rebased: false };
+    if (!rejected) return { result: first, rebased: false, rebaseConflict: false };
+    const fetch = this.exec(['fetch', '--', remote, branch]);
+    if (!fetch.ok) return { result: first, rebased: false, rebaseConflict: false };
     const rebase = this.exec(['rebase', `${remote}/${branch}`]);
     if (!rebase.ok) {
       this.exec(['rebase', '--abort']);
-      return { result: first, rebased: false };
+      return { result: first, rebased: false, rebaseConflict: true };
     }
-    return { result: this.push(remote, branch), rebased: true };
+    return { result: this.push(remote, branch), rebased: true, rebaseConflict: false };
   }
 
   headSha(): string | null {
@@ -131,7 +159,8 @@ export class Git {
   }
 
   remoteHeadSha(remote: string, branch: string): string | null {
-    const res = this.exec(['ls-remote', remote, `refs/heads/${branch}`]);
+    if (!isSafeGitArg(remote) || !isSafeGitArg(branch)) return null;
+    const res = this.exec(['ls-remote', '--', remote, `refs/heads/${branch}`]);
     if (!res.ok) return null;
     const sha = res.stdout.split('\t')[0]?.trim();
     return sha && sha.length > 0 ? sha : null;
@@ -157,12 +186,20 @@ export class Git {
     expectedSha: string,
     newSha: string,
   ): GitResult {
+    if (!isSafeGitArg(remote)) return unsafeArgResult('remote', remote);
+    if (!isSafeGitArg(branch)) return unsafeArgResult('branch', branch);
     return this.exec([
       'push',
       `--force-with-lease=refs/heads/${branch}:${expectedSha}`,
+      '--',
       remote,
       `${newSha}:refs/heads/${branch}`,
     ]);
+  }
+
+  /** Validate a branch name with git's own rules. */
+  isValidBranchName(branch: string): boolean {
+    return isSafeGitArg(branch) && this.exec(['check-ref-format', '--branch', branch]).ok;
   }
 
   mixedReset(ref: string): GitResult {

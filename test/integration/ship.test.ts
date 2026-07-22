@@ -126,6 +126,39 @@ describe('ship (integration)', () => {
     expect(holds.some((h) => h.gate === 'size')).toBe(true);
   });
 
+  it('holds a Stripe live key in a source file', () => {
+    fix = makeFixture({ devin: true });
+    enable(fix);
+    // Assembled at runtime so no key-shaped literal lands in the repo.
+    const key = ['sk', 'live', 'abcdefghijklmnopqrstuvwx'].join('_');
+    writeFileSync(join(fix.repo, 'payments.ts'), `const stripeKey = "${key}";\n`);
+    const result = cliJson(fix, ['ship']);
+    expect(result['shipped']).toBe(false);
+    expect(result['held']).toBe(true);
+    const holds = result['holds'] as Array<{ gate: string }>;
+    expect(holds.some((h) => h.gate === 'secrets')).toBe(true);
+  });
+
+  it('holds on the byte cap for a large text file', () => {
+    fix = makeFixture({ devin: true });
+    enable(fix);
+    writeFileSync(join(fix.repo, 'big.txt'), 'x'.repeat(1_100_000) + '\n');
+    const result = cliJson(fix, ['ship']);
+    expect(result['held']).toBe(true);
+    const holds = result['holds'] as Array<{ gate: string }>;
+    expect(holds.some((h) => h.gate === 'size')).toBe(true);
+  });
+
+  it('holds on the byte cap for a large binary file', () => {
+    fix = makeFixture({ devin: true });
+    enable(fix);
+    writeFileSync(join(fix.repo, 'big.bin'), Buffer.alloc(1_100_000, 0));
+    const result = cliJson(fix, ['ship']);
+    expect(result['held']).toBe(true);
+    const holds = result['holds'] as Array<{ gate: string }>;
+    expect(holds.some((h) => h.gate === 'size')).toBe(true);
+  });
+
   it('refuses --force-secrets in autonomous (Devin, non-TTY) mode', () => {
     fix = makeFixture({ devin: true });
     enable(fix);

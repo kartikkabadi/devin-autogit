@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { Git, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, REPO_CONFIG_FILENAME, repoConfigSchema } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
+import { runHookInstall } from './hook.js';
 
 export interface OnOptions {
   json: boolean;
   dryRun: boolean;
   policy?: string;
   publicOk: boolean;
+  withHooks?: boolean;
 }
 
 function looksPublic(remoteUrl: string | null): boolean {
@@ -52,6 +54,7 @@ export function runOn(opts: OnOptions, cwd = process.cwd()): number {
   const config = repoConfigSchema.safeParse({
     enabled: true,
     publicOk: opts.publicOk,
+    ...(opts.withHooks ? { hooks: true } : {}),
     ...(policyOverride !== undefined ? { policy: policyOverride } : {}),
   });
   if (!config.success) {
@@ -67,6 +70,21 @@ export function runOn(opts: OnOptions, cwd = process.cwd()): number {
   out.info(
     `${opts.dryRun ? 'would write' : existed ? 'updated' : 'wrote'} ${path} — auto-ship enabled`,
   );
-  out.result({ ok: true, action: 'on', configPath: path, dryRun: opts.dryRun });
+
+  if (opts.withHooks) {
+    const hookCode = runHookInstall({ json: false, dryRun: opts.dryRun }, cwd);
+    if (hookCode !== EXIT_OK) {
+      out.result({ ok: false, action: 'on', configPath: path, hooks: false });
+      return hookCode;
+    }
+  }
+
+  out.result({
+    ok: true,
+    action: 'on',
+    configPath: path,
+    hooks: opts.withHooks ?? false,
+    dryRun: opts.dryRun,
+  });
   return EXIT_OK;
 }

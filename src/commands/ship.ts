@@ -11,6 +11,7 @@ export interface ShipOptions {
   json: boolean;
   dryRun: boolean;
   message?: string;
+  quiet?: boolean;
   forceSecrets: boolean;
   checkpoint: boolean;
   remote: string;
@@ -22,7 +23,7 @@ function holdReason(gate: string | undefined): string {
 }
 
 export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
-  const out = new Output({ json: opts.json });
+  const out = new Output({ json: opts.json, quiet: opts.quiet ?? false });
   const git = new Git(cwd);
   if (!git.isRepo()) {
     out.error('not inside a git repository');
@@ -184,10 +185,11 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
     return EXIT_OK;
   }
 
-  const { result: push, rebased, rebaseConflict } = git.pushWithRebaseRetry(
-    opts.remote,
-    branch as string,
-  );
+  const {
+    result: push,
+    rebased,
+    rebaseConflict,
+  } = git.pushWithRebaseRetry(opts.remote, branch as string);
   if (!push.ok) {
     if (rebaseConflict) {
       out.warn('rebase conflict — cannot auto-resolve, holding (fail-closed)');

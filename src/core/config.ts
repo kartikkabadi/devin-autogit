@@ -11,6 +11,8 @@ export const policyConfigSchema = z
     denyPaths: z
       .array(z.string())
       .default(['**/.env', '**/.env.*', '**/*.pem', '**/id_rsa', '**/id_ed25519']),
+    /** Alias for denyPaths; merged into denyPaths at resolve time. */
+    denyGlobs: z.array(z.string()).optional(),
     allowPaths: z.array(z.string()).default([]),
     maxFiles: z.number().int().positive().default(300),
     maxBytes: z
@@ -129,6 +131,10 @@ export function resolveConfig(
     ...globalCfg.policy,
     ...(repoCfg?.policy ?? {}),
   };
+
+  if (policy.denyGlobs) {
+    policy.denyPaths = [...new Set([...policy.denyPaths, ...policy.denyGlobs])];
+  }
 
   const envProtected = parseListEnv(env['DEVIN_AUTOGIT_PROTECTED_BRANCHES']);
   if (envProtected) policy.protectedBranches = envProtected;

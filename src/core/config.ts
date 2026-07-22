@@ -42,6 +42,8 @@ export const repoConfigSchema = z
 export const globalConfigSchema = z
   .object({
     defaultBranchPrefix: z.string().default('devin/'),
+    /** Detected environment, e.g. `devin/autonomous` or `generic/interactive`. */
+    environment: z.string().optional(),
     policy: policyConfigSchema.default({}),
   })
   .strict();

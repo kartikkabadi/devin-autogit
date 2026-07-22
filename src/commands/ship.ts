@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { Git, buildCommitMessage, deriveSubject, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, REPO_CONFIG_FILENAME, resolveConfig } from '../core/config.js';
 import { HOOKS_FILE_RELPATH } from '../core/hooks.js';
@@ -16,6 +17,28 @@ export interface ShipOptions {
   forceSecrets: boolean;
   checkpoint: boolean;
   remote: string;
+  fromHook?: boolean;
+}
+
+/** Read the Devin CLI hook payload from stdin, if any. Returns null on empty/invalid input. */
+function readHookPayload(): Record<string, unknown> | null {
+  if (process.stdin.isTTY) return null;
+  let raw: string;
+  try {
+    raw = readFileSync(0, 'utf8');
+  } catch {
+    return null;
+  }
+  if (raw.trim().length === 0) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function holdReason(gate: string | undefined): string {
@@ -25,6 +48,14 @@ function holdReason(gate: string | undefined): string {
 
 export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
   const out = new Output({ json: opts.json, quiet: opts.quiet ?? false });
+  if (opts.fromHook) {
+    const payload = readHookPayload();
+    if (payload !== null && payload['stop_hook_active'] === true) {
+      out.info('stop hook re-invoked by the Devin CLI (stop_hook_active) — no-op to avoid loops');
+      out.result({ ok: true, action: 'ship', shipped: false, reason: 'stop-hook-active' });
+      return EXIT_OK;
+    }
+  }
   const git = new Git(cwd);
   if (git.isBareRepo()) {
     out.error('bare repository — work tree required');

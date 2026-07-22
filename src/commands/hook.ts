@@ -28,14 +28,14 @@ export interface HookUninstallOptions {
 
 /** Resolve the command string used to invoke `devin-autogit` from a hook. */
 export function resolveHookCommand(binOverride?: string): string | null {
-  if (binOverride) return `${binOverride} ship --quiet --json`;
+  if (binOverride) return `${binOverride} ship --quiet --json --from-hook`;
   const which = spawnSync('which', ['devin-autogit'], { encoding: 'utf8' });
   if (which.status === 0 && which.stdout.trim().length > 0) {
-    return 'devin-autogit ship --quiet --json';
+    return 'devin-autogit ship --quiet --json --from-hook';
   }
   const here = dirname(fileURLToPath(import.meta.url));
   for (const candidate of [resolve(here, '../cli.js'), resolve(here, '../../dist/cli.js')]) {
-    if (existsSync(candidate)) return `node ${candidate} ship --quiet --json`;
+    if (existsSync(candidate)) return `node ${candidate} ship --quiet --json --from-hook`;
   }
   return null;
 }

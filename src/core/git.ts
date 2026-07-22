@@ -111,9 +111,39 @@ export class Git {
     return out;
   }
 
+  /**
+   * Staged change size in bytes. Text files use the textual diff size; binary
+   * files (where the diff is just a "Binary files differ" stub) use the actual
+   * staged blob size.
+   */
   stagedDiffBytes(): number {
     const res = this.exec(['diff', '--cached']);
-    return res.ok ? Buffer.byteLength(res.stdout, 'utf8') : 0;
+    let bytes = res.ok ? Buffer.byteLength(res.stdout, 'utf8') : 0;
+    for (const path of this.stagedBinaryFiles()) {
+      const size = this.exec(['cat-file', '-s', `:${path}`]);
+      if (size.ok) bytes += Number.parseInt(size.stdout.trim(), 10) || 0;
+    }
+    return bytes;
+  }
+
+  /** Staged files git reports as binary (`-` `-` in `--numstat`). */
+  stagedBinaryFiles(): string[] {
+    const res = this.exec(['diff', '--cached', '--numstat', '-z']);
+    if (!res.ok) return [];
+    const tokens = res.stdout.split('\0');
+    const out: string[] = [];
+    for (let i = 0; i < tokens.length; i++) {
+      const m = /^(-|\d+)\t(-|\d+)\t(.*)$/.exec(tokens[i] as string);
+      if (!m) continue;
+      let path = m[3] as string;
+      if (path.length === 0) {
+        // Rename entry: the old and new paths follow as separate NUL fields.
+        path = tokens[i + 2] ?? '';
+        i += 2;
+      }
+      if (m[1] === '-' && path.length > 0) out.push(path);
+    }
+    return out;
   }
 
   hasStagedChanges(): boolean {

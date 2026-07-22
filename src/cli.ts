@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { runSetup } from './commands/setup.js';
 import { runOn } from './commands/on.js';
 import { runOff } from './commands/off.js';
@@ -67,6 +67,9 @@ program
   .option('--force-secrets', 'override a secrets hold (refused in autonomous mode)')
   .option('--checkpoint', 'record a checkpoint ref before pushing')
   .option('--remote <name>', 'remote to push to', 'origin')
+  .addOption(
+    new Option('--from-hook', 'invoked from a Devin CLI lifecycle hook (reads hook payload from stdin)').hideHelp(),
+  )
   .action(
     (opts: {
       message?: string;
@@ -74,6 +77,7 @@ program
       forceSecrets?: boolean;
       checkpoint?: boolean;
       remote: string;
+      fromHook?: boolean;
     }) => {
       process.exitCode = runShip({
         ...globalOpts(),
@@ -82,6 +86,7 @@ program
         forceSecrets: opts.forceSecrets ?? false,
         checkpoint: opts.checkpoint ?? false,
         remote: opts.remote,
+        fromHook: opts.fromHook ?? false,
       });
     },
   );

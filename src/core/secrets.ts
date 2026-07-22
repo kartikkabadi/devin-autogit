@@ -36,13 +36,16 @@ const PATTERNS: SecretPattern[] = [
 ];
 
 const SENSITIVE_FILENAME = /(^|\/)\.env(\.[A-Za-z0-9._-]+)?$/;
-const TEMPLATE_PATH = /\.(example|sample|template|dist)(\.[A-Za-z0-9]+)?$/i;
+const TEMPLATE_EXT = /\.(example|sample|template|dist|fake|placeholder)(\.[A-Za-z0-9]+)?$/i;
+const TEMPLATE_INFIX = /\.(example|sample|template|fake|placeholder)\./i;
+const TEMPLATE_DIR = /(^|\/)(examples?|samples?|templates?|fakes?|placeholders?)\//i;
 
 const PLACEHOLDER =
-  /\b(your|my|xxx+|example|sample|placeholder|dummy|fake|test|changeme|replace|<[^>]*>|\$\{[^}]*\}|\{\{[^}]*\}\})/i;
+  /\b(your|my|xxx+|dummy|changeme|replace(me)?)\b|<[^>]*>|\$\{[^}]*\}|\{\{[^}]*\}\}/i;
 
+/** Example/template files, identified by path only — never by secret value. */
 export function isTemplatePath(path: string): boolean {
-  return TEMPLATE_PATH.test(path);
+  return TEMPLATE_EXT.test(path) || TEMPLATE_INFIX.test(path) || TEMPLATE_DIR.test(path);
 }
 
 export function isSensitiveFilename(path: string): boolean {

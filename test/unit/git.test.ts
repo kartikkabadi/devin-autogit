@@ -36,6 +36,20 @@ describe('trailers', () => {
   });
 });
 
+describe('truncateSubject', () => {
+  it('never splits surrogate pairs at the truncation boundary', () => {
+    const subject = 'x'.repeat(68) + '😀' + 'y'.repeat(10);
+    const truncated = truncateSubject(subject);
+    expect(truncated).toBe('x'.repeat(68) + '😀...');
+    expect(truncated.includes('\uFFFD')).toBe(false);
+  });
+
+  it('keeps subjects of exactly 72 visible characters intact', () => {
+    const subject = '😀'.repeat(72);
+    expect(truncateSubject(subject)).toBe(subject);
+  });
+});
+
 describe('deriveSubject', () => {
   it('prefers the explicit -m message', () => {
     expect(deriveSubject('My message', 'Devin task', ['a.ts'])).toBe('My message');

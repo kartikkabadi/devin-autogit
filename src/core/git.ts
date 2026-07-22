@@ -55,6 +55,11 @@ export class Git {
     return this.exec(['rev-parse', '--is-inside-work-tree']).ok;
   }
 
+  isBareRepo(): boolean {
+    const res = this.exec(['rev-parse', '--is-bare-repository']);
+    return res.ok && res.stdout.trim() === 'true';
+  }
+
   repoRoot(): string | null {
     const res = this.exec(['rev-parse', '--show-toplevel']);
     return res.ok ? res.stdout.trim() : null;
@@ -288,5 +293,6 @@ export function deriveSubject(
 }
 
 export function truncateSubject(subject: string): string {
-  return subject.length <= 72 ? subject : subject.slice(0, 69) + '...';
+  const chars = [...subject];
+  return chars.length <= 72 ? subject : chars.slice(0, 69).join('') + '...';
 }

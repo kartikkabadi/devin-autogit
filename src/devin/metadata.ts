@@ -32,10 +32,19 @@ export interface DevinMetadata {
   branchPrefix: string | null;
   protectedBranches: string[] | null;
   sources: string[];
+  /** Metadata files that exist but could not be parsed/validated. */
+  errors: string[];
 }
 
 export function emptyMetadata(): DevinMetadata {
-  return { sessionId: null, task: null, branchPrefix: null, protectedBranches: null, sources: [] };
+  return {
+    sessionId: null,
+    task: null,
+    branchPrefix: null,
+    protectedBranches: null,
+    sources: [],
+    errors: [],
+  };
 }
 
 export function readDevinMetadata(repoRoot: string): DevinMetadata {
@@ -50,9 +59,11 @@ export function readDevinMetadata(repoRoot: string): DevinMetadata {
         meta.sessionId = parsed.data.session_id ?? parsed.data.sessionId ?? null;
         meta.task = parsed.data.task ?? parsed.data.task_title ?? null;
         meta.sources.push('.devin/session.json');
+      } else {
+        meta.errors.push('.devin/session.json failed schema validation');
       }
     } catch {
-      // fail-closed elsewhere; unreadable metadata is simply ignored here
+      meta.errors.push('.devin/session.json is unreadable or not valid JSON');
     }
   }
 
@@ -60,6 +71,9 @@ export function readDevinMetadata(repoRoot: string): DevinMetadata {
   if (existsSync(blueprintPath)) {
     try {
       const parsed = blueprintSchema.safeParse(parseYaml(readFileSync(blueprintPath, 'utf8')));
+      if (!parsed.success) {
+        meta.errors.push('.devin/blueprint.yaml failed schema validation');
+      }
       if (parsed.success) {
         if (meta.task === null && parsed.data.task) meta.task = parsed.data.task;
         if (parsed.data.conventions?.branch_prefix) {
@@ -71,7 +85,7 @@ export function readDevinMetadata(repoRoot: string): DevinMetadata {
         meta.sources.push('.devin/blueprint.yaml');
       }
     } catch {
-      // ignore unparseable blueprint
+      meta.errors.push('.devin/blueprint.yaml is unreadable or not valid YAML');
     }
   }
 

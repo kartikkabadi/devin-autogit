@@ -53,7 +53,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
 
   if (!config.enabled) {
     out.info('auto-ship not enabled in this repo (run `devin-autogit on`) — no-op');
-    out.result({ ok: true, action: 'ship', shipped: false, reason: 'not-enabled' });
+    out.result({ ok: true, action: 'ship', shipped: false, pushed: false, reason: 'not-enabled' });
     return EXIT_OK;
   }
 
@@ -78,6 +78,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       held: true,
       result: 'held',
       reason: 'invalid-metadata',
+      pushed: false,
       holds: metadata.errors.map((e) => ({ gate: 'metadata', reason: `invalid metadata: ${e}` })),
       autonomous: detection.autonomous,
     });
@@ -86,7 +87,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
 
   if (!git.hasAnyChanges() && !git.hasStagedChanges()) {
     out.info('working tree clean — nothing to ship');
-    out.result({ ok: true, action: 'ship', shipped: false, reason: 'clean' });
+    out.result({ ok: true, action: 'ship', shipped: false, pushed: false, reason: 'clean' });
     return EXIT_OK;
   }
 
@@ -103,7 +104,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
   const stagedFiles = git.stagedFiles();
   if (stagedFiles.length === 0) {
     out.info('nothing staged — nothing to ship');
-    out.result({ ok: true, action: 'ship', shipped: false, reason: 'clean' });
+    out.result({ ok: true, action: 'ship', shipped: false, pushed: false, reason: 'clean' });
     return EXIT_OK;
   }
 
@@ -135,6 +136,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       held: true,
       result: 'held',
       reason: holdReason(decision.holds[0]?.gate),
+      pushed: false,
       holds: decision.holds,
       protectedBranches: policy.protectedBranches,
       autonomous: detection.autonomous,
@@ -162,6 +164,7 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
       ok: true,
       action: 'ship',
       shipped: false,
+      pushed: false,
       dryRun: true,
       reason: null,
       subject,
@@ -178,8 +181,21 @@ export function runShip(opts: ShipOptions, cwd = process.cwd()): number {
 
   const commit = git.commit(message);
   if (!commit.ok) {
-    out.error(`git commit failed: ${commit.stderr.trim()}`);
-    return EXIT_CONFIG_ERROR;
+    const detail = sanitizeRemoteUrl(commit.stderr.trim());
+    git.unstageAll();
+    out.warn(`git commit failed: ${detail}`);
+    out.info('changes held — nothing committed, everything unstaged, working tree preserved');
+    out.result({
+      ok: true,
+      action: 'ship',
+      shipped: false,
+      held: true,
+      result: 'held',
+      reason: 'git-commit-failed',
+      pushed: false,
+      holds: [{ gate: 'git', reason: detail }],
+    });
+    return EXIT_OK;
   }
 
   if (!git.hasRemote(opts.remote)) {

@@ -67,7 +67,7 @@ export interface InstallHookOptions {
 
 /** A hook is ours if it invokes `devin-autogit ship` directly or via a node path. */
 export function isOurHookCommand(command: string, marker: string = HOOK_COMMAND_MARKER): boolean {
-  return command.includes(marker) || / ship --quiet( --json)?$/.test(command.trim());
+  return command.includes(marker) || / ship --quiet( --json)?( --from-hook)?$/.test(command.trim());
 }
 
 function hasOurHook(entries: MatcherEntry[], marker: string): boolean {

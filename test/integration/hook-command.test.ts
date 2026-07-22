@@ -20,7 +20,7 @@ describe('hook install / uninstall', () => {
     expect(hooks['Stop']).toEqual([
       {
         matcher: '',
-        hooks: [{ type: 'command', command: `node ${CLI} ship --quiet --json`, timeout: 120 }],
+        hooks: [{ type: 'command', command: `node ${CLI} ship --quiet --json --from-hook`, timeout: 120 }],
       },
     ]);
     expect(hooks['SessionEnd']).toBeDefined();

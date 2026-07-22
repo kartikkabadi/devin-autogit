@@ -3,10 +3,10 @@ import { join, resolve } from 'node:path';
 import { Git, hasShippedByTrailer, isSafeGitArg } from '../core/git.js';
 import { REPO_CONFIG_FILENAME, repoConfigSchema } from '../core/config.js';
 
-const SESSION_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
+const SWARM_BASE_PATTERN = /^[A-Za-z0-9._-]+$/;
 
-export function isValidSessionId(sessionId: string): boolean {
-  return isSafeGitArg(sessionId) && SESSION_ID_PATTERN.test(sessionId);
+export function isValidSwarmBase(base: string): boolean {
+  return isSafeGitArg(base) && SWARM_BASE_PATTERN.test(base);
 }
 
 /** Busy-marker dir under the checkout's own git dir, so worktrees never block each other. */
@@ -15,12 +15,12 @@ export function busyMarkerDir(git: Git): string | null {
   return res.ok ? join(res.stdout.trim(), 'devin-autogit-busy') : null;
 }
 
-export function subagentBranch(sessionId: string, agentIndex: number): string {
-  return `devin/${sessionId}/agent-${agentIndex}`;
+export function subagentBranch(base: string, agentIndex: number): string {
+  return `devin/${base}/agent-${agentIndex}`;
 }
 
-export function swarmBranchPattern(sessionId: string): RegExp {
-  return new RegExp(`^devin/${escapeRegExp(sessionId)}/agent-\\d+$`);
+export function swarmBranchPattern(base: string): RegExp {
+  return new RegExp(`^devin/${escapeRegExp(base)}/agent-\\d+$`);
 }
 
 function escapeRegExp(s: string): string {
@@ -36,28 +36,28 @@ export interface SwarmInitResult {
 export function swarmInit(
   git: Git,
   repoRoot: string,
-  sessionId: string,
+  base: string,
   agents: number,
 ): SwarmInitResult {
   const result: SwarmInitResult = { branches: [], worktrees: [], errors: [] };
-  if (!isValidSessionId(sessionId)) {
-    result.errors.push(`invalid session ID "${sessionId}" — must match ${SESSION_ID_PATTERN}`);
+  if (!isValidSwarmBase(base)) {
+    result.errors.push(`invalid swarm base "${base}" — must match ${SWARM_BASE_PATTERN}`);
     return result;
   }
-  const base = git.headSha();
-  if (base === null) {
+  const baseSha = git.headSha();
+  if (baseSha === null) {
     result.errors.push('cannot resolve HEAD — is there at least one commit?');
     return result;
   }
   const parentConfigPath = join(repoRoot, REPO_CONFIG_FILENAME);
   for (let i = 1; i <= agents; i++) {
-    const branch = subagentBranch(sessionId, i);
+    const branch = subagentBranch(base, i);
     if (!git.isValidBranchName(branch)) {
       result.errors.push(`agent-${i}: invalid branch name "${branch}"`);
       continue;
     }
-    const worktreePath = join(repoRoot, '..', `${sessionId}-agent-${i}`);
-    const res = git.exec(['worktree', 'add', '-b', branch, worktreePath, base]);
+    const worktreePath = join(repoRoot, '..', `${base}-agent-${i}`);
+    const res = git.exec(['worktree', 'add', '-b', branch, worktreePath, baseSha]);
     if (res.ok) {
       result.branches.push(branch);
       result.worktrees.push(worktreePath);
@@ -124,10 +124,10 @@ export interface SwarmCollectResult {
   integrationBranch: string;
 }
 
-export function listSwarmBranches(git: Git, sessionId: string): string[] {
+export function listSwarmBranches(git: Git, base: string): string[] {
   const res = git.exec(['for-each-ref', '--format=%(refname:short)', 'refs/heads/devin/']);
   if (!res.ok) return [];
-  const pattern = swarmBranchPattern(sessionId);
+  const pattern = swarmBranchPattern(base);
   return res.stdout
     .split('\n')
     .map((s) => s.trim())
@@ -138,14 +138,14 @@ export function listSwarmBranches(git: Git, sessionId: string): string[] {
  * Merge completed subagent branches into an integration branch. Fail-closed:
  * a conflicting merge is aborted and reported, never left half-done.
  */
-export function swarmCollect(git: Git, sessionId: string, into: string): SwarmCollectResult {
+export function swarmCollect(git: Git, base: string, into: string): SwarmCollectResult {
   const result: SwarmCollectResult = {
     merged: [],
     skipped: [],
     conflicts: [],
     integrationBranch: into,
   };
-  const branches = listSwarmBranches(git, sessionId);
+  const branches = listSwarmBranches(git, base);
 
   if (!isSafeGitArg(into) || !git.isValidBranchName(into)) {
     result.skipped.push({ branch: into, reason: `invalid integration branch name "${into}"` });

@@ -7,7 +7,7 @@
 export interface SecretFinding {
   file: string;
   kind: string;
-  match: string;
+  line?: number;
 }
 
 interface SecretPattern {
@@ -53,36 +53,31 @@ export function isPlaceholderLine(line: string): boolean {
   return PLACEHOLDER.test(line);
 }
 
-export function scanLine(file: string, line: string): SecretFinding | null {
+export function scanLine(file: string, line: string, lineNumber?: number): SecretFinding | null {
   if (isTemplatePath(file)) return null;
   for (const pattern of PATTERNS) {
     const m = pattern.regex.exec(line);
     if (m) {
       if (pattern.kind === 'generic-assignment' && isPlaceholderLine(line)) continue;
-      return { file, kind: pattern.kind, match: redact(m[0]) };
+      return { file, kind: pattern.kind, ...(lineNumber !== undefined ? { line: lineNumber } : {}) };
     }
   }
   return null;
 }
 
 export function scanAddedLines(
-  addedLines: Array<{ file: string; line: string }>,
+  addedLines: Array<{ file: string; line: string; lineNumber?: number }>,
   stagedFiles: string[],
 ): SecretFinding[] {
   const findings: SecretFinding[] = [];
   for (const file of stagedFiles) {
     if (isSensitiveFilename(file)) {
-      findings.push({ file, kind: 'sensitive-filename', match: file });
+      findings.push({ file, kind: 'sensitive-filename' });
     }
   }
-  for (const { file, line } of addedLines) {
-    const finding = scanLine(file, line);
+  for (const { file, line, lineNumber } of addedLines) {
+    const finding = scanLine(file, line, lineNumber);
     if (finding) findings.push(finding);
   }
   return findings;
-}
-
-function redact(match: string): string {
-  if (match.length <= 12) return match.slice(0, 4) + '...';
-  return `${match.slice(0, 8)}...${match.slice(-4)}`;
 }

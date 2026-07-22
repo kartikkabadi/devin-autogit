@@ -1,4 +1,4 @@
-import { Git } from '../core/git.js';
+import { Git, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, resolveConfig } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
 import { detectDevinSession } from '../devin/session.js';
@@ -50,7 +50,7 @@ export function runDoctor(opts: DoctorOptions, cwd = process.cwd()): number {
       name: 'remote-configured',
       ok: hasRemote,
       detail: hasRemote
-        ? (git.remoteUrl(opts.remote) ?? '')
+        ? sanitizeRemoteUrl(git.remoteUrl(opts.remote) ?? '')
         : `remote "${opts.remote}" not configured`,
     });
 
@@ -59,7 +59,7 @@ export function runDoctor(opts: DoctorOptions, cwd = process.cwd()): number {
       checks.push({
         name: 'remote-access',
         ok: lsRemote.ok,
-        detail: lsRemote.ok ? 'remote reachable and readable' : lsRemote.stderr.trim(),
+        detail: lsRemote.ok ? 'remote reachable and readable' : sanitizeRemoteUrl(lsRemote.stderr.trim()),
       });
     }
 

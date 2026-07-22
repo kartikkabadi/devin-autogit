@@ -62,11 +62,13 @@ describe('secrets scan', () => {
     expect(findings.map((f) => f.kind).sort()).toEqual(['github-token', 'sensitive-filename']);
   });
 
-  it('redacts matches in findings', () => {
+  it('never includes the matched secret text in findings', () => {
     const findings = scanAddedLines(
-      [{ file: 'a.ts', line: 'ghp_abcdefghijklmnopqrstuvwxyz0123456789' }],
+      [{ file: 'a.ts', line: 'ghp_abcdefghijklmnopqrstuvwxyz0123456789', lineNumber: 7 }],
       ['a.ts'],
     );
-    expect(findings[0]?.match).not.toContain('abcdefghijklmnopqrstuvwxyz0123456789');
+    expect(findings[0]?.kind).toBe('github-token');
+    expect(findings[0]?.line).toBe(7);
+    expect(JSON.stringify(findings)).not.toContain('abcdefghijklmnopqrstuvwxyz0123456789');
   });
 });

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Git } from '../core/git.js';
+import { Git, sanitizeRemoteUrl } from '../core/git.js';
 import { ConfigError, REPO_CONFIG_FILENAME, repoConfigSchema } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
 
@@ -42,7 +42,7 @@ export function runOn(opts: OnOptions, cwd = process.cwd()): number {
 
   const remoteUrl = git.remoteUrl('origin');
   if (looksPublic(remoteUrl) && !opts.publicOk) {
-    out.warn(`remote ${remoteUrl} may be a public repo`);
+    out.warn(`remote ${sanitizeRemoteUrl(remoteUrl ?? '')} may be a public repo`);
     out.warn('auto-shipping to a public repo can leak work in progress or secrets');
     out.warn('re-run with --public-ok to confirm');
     out.result({ ok: false, action: 'on', held: true, reason: 'public-repo-guard' });

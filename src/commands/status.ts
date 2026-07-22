@@ -23,6 +23,11 @@ export function runStatus(opts: StatusOptions, cwd = process.cwd()): number {
   const version = packageVersion();
   const inRepo = git.isRepo();
   const root = inRepo ? git.repoRoot() : null;
+  if (root === null) {
+    out.error('not inside a git repository');
+    out.result({ ok: false, action: 'status', version, repo: null });
+    return EXIT_CONFIG_ERROR;
+  }
   const detection = detectDevinSession({ repoRoot: root });
 
   let enabled = false;

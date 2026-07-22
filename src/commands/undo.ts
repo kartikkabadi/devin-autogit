@@ -1,4 +1,5 @@
 import { Git, hasShippedByTrailer } from '../core/git.js';
+import { ConfigError, resolveConfig } from '../core/config.js';
 import { Output, EXIT_OK, EXIT_CONFIG_ERROR } from '../core/output.js';
 
 export interface UndoOptions {
@@ -36,7 +37,22 @@ export function runUndo(opts: UndoOptions, cwd = process.cwd()): number {
   const parent = parentRes.stdout.trim();
   const branch = git.currentBranch();
 
+  let protectedBranches: string[] = ['main', 'master'];
+  const root = git.repoRoot();
+  if (root !== null) {
+    try {
+      protectedBranches = resolveConfig(root).policy.protectedBranches;
+    } catch (err) {
+      if (!(err instanceof ConfigError)) throw err;
+    }
+  }
+
   if (branch !== null && git.hasRemote(opts.remote)) {
+    if (protectedBranches.includes(branch)) {
+      out.error(`branch "${branch}" is protected — refusing to rewind the remote`);
+      out.result({ ok: false, action: 'undo', reason: 'protected-branch', branch });
+      return EXIT_CONFIG_ERROR;
+    }
     const remoteSha = git.remoteHeadSha(opts.remote, branch);
     if (remoteSha !== null && remoteSha !== head) {
       out.error(
